@@ -1,5 +1,7 @@
 # Ledger Device Management Kit (DMK) TypeScript + Signer kits — research note
 
+> **Correction (2026-10-10, source audit).** All in-repo signer kits are on npm (l.15, l.43; Tron is `device-signer-kit-tron`); rn-hid/rn-ble/mockserver versions are known (l.32-33); only GenuineCheck/Install/ListInstalled/Uninstall need the secure channel (l.108); `withAddressBook` exists (l.129); BLE id is `WEB-BLE-RN-STYLE` (l.185); Cardano GET_SERIAL does fingerprint a device, unauthenticated (l.70); the Speculos command needs `-p/--pki-prod` to clear-sign with prod CAL (l.243). See `source-audit.md` §2 (M04, M05) and §5.
+
 Date: 2026-10-10. Scope: `@ledgerhq/device-management-kit` and friends (monorepo `LedgerHQ/device-sdk-ts`, branch `develop`). Target: hackathon build on Windows 11 with a Nano S Plus (USB only) and a Flex (USB + BLE + NFC), 3 days left.
 
 Legend: **VERIFIED** = read in a primary source (Ledger docs page, repo source, npm registry). **INFERRED** = reasoned from sources / general knowledge, not read verbatim.

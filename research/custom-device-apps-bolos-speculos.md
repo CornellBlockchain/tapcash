@@ -1,5 +1,7 @@
 # Custom Ledger device apps: SDKs, Speculos, sideloading, NFC
 
+> **Correction (2026-10-10, source audit).** API_LEVEL 27 = flex_1.7.0 and nanos+_1.7.0, not nanos+_1.4.1 (API 24) (l.32, l.176); the §7 takeaway misses BOLOS endorsement, which personal_sign cannot replace; §1.3 omits Rust `debug_over_usb`; only `-u/--usb` is deprecated in Speculos (l.193); Developer mode is required for OpenPGP/Passwords/testnet apps and Bitcoin 2.5.x has miniscript/MuSig2/clear-text policies (l.184-186, l.249-250). See `source-audit.md` §1, §2 (M01, M06, M12) and §5.
+
 Research note for the N3XT hackathon (deadline 2026-10-13 23:59 CEST). Written 2026-10-10 from web sources only; nothing was installed or plugged in. Hardware on hand: Nano S Plus (USB only), Flex (USB + BLE + NFC). Host: Windows 11.
 
 Tags: **VERIFIED** = read in a primary source (Ledger docs, LedgerHQ GitHub source, PyPI). **INFERRED** = my reading between the lines; treat as a hypothesis to test on Day 1.

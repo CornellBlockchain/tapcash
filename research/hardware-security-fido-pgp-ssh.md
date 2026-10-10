@@ -1,5 +1,7 @@
 # Ledger hardware-security primitives: Security Key (FIDO2/U2F), OpenPGP, SSH
 
+> **Correction (2026-10-10, source audit).** Ledger Flex and Nano S Plus AAGUIDs are in FIDO MDS3 with packed attestation, so `attestation:'direct'` is verifiable (l.219, l.347); the stock Ethereum app (INS 0x18, >= 1.22.3) gives a tap-gated X25519 secret, a tap-to-decrypt path on native Windows not covered in §3-5. See `source-audit.md` §2 (M02, M03).
+
 Research note for the N3XT hackathon (deadline 2026-10-13). Written 2026-10-10. Nothing was installed or plugged in; everything below comes from reading docs and source. Each claim is tagged **VERIFIED** (read in a primary source) or **INFERRED** (my deduction). Gaps are called out, not papered over.
 
 Hardware on hand: Ledger Nano S Plus (USB only) and Ledger Flex (USB, BLE, NFC). Host: Windows 11.

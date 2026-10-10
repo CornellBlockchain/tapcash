@@ -1,5 +1,7 @@
 # Windows 11 USB/HID reality check: Ledger Live coexistence, drivers, node-hid, Python tooling
 
+> **Correction (2026-10-10, source audit).** The HID_KBD, CCID and CDC rows marked INFERRED are VERIFIED in source (`HAVE_USB_HIDKBD`, `ENABLE_USB_CCID`, `DEBUG_OVER_USB`). See `source-audit.md` §2 (M13) and §5.
+
 Researched 2026-10-10 from primary sources (source code, npm registry, PyPI, Microsoft docs, GitHub issues). No hardware touched, nothing installed. Tarballs for `node-hid` and `usb` were downloaded to the scratchpad to list their contents.
 
 Legend: **VERIFIED** = read in a primary source (quoted or cited below). **INFERRED** = reasoned from verified facts, not directly observed. **SNIPPET** = text seen only in a search-engine snippet of an official page whose body could not be fetched (support.ledger.com is a JS-rendered SPA; both the HTML and the Zendesk JSON endpoint return the 77 KB shell).

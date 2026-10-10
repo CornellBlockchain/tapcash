@@ -1,5 +1,7 @@
 # Ledger DMK Skills for AI agents — research note
 
+> **Correction (2026-10-10, source audit).** The secure-channel host is `wss://scriptrunner.api.live.ledger.com/update` (+ `/genuine`, `/install`, `/apps/list`, no API key), not `wss://manager.live.ledger.com` (l.120). See `source-audit.md` §4.3 and §5.
+
 Written 2026-10-10 for the N3XT hackathon (deadline Oct 13 23:59 CEST). Desk research only: nothing installed, no hardware touched. Facts are tagged **VERIFIED** (read in a primary source: Ledger docs, the GitHub repo, npm registry) or **INFERRED**.
 
 ## TL;DR

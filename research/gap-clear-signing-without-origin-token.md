@@ -1,5 +1,7 @@
 # Gap: what clear-signs on a retail Flex / Nano S Plus WITHOUT a Ledger `originToken`
 
+> **Correction (2026-10-10, source audit).** `/gated_dapps` is open (358 entries, probed 2026-10-10), and without an origin token gated contracts show a 'There is a safer way to sign' interstitial on blind paths, Nano S Plus included (l.104, l.238). See `source-audit.md` §1 and §2 (M09).
+
 Date: 2026-10-10. Scope: `@ledgerhq/device-signer-kit-ethereum` 1.18.1 + `@ledgerhq/context-module` 2.6.0 (what npm `latest` resolves to today), `LedgerHQ/device-sdk-ts` `develop` @ `1a3f860` (2026-10-09), `LedgerHQ/app-ethereum` `develop` @ `5a48940` (2026-09-22). No hardware touched; nothing installed. Evidence = source read in a sparse clone + published npm tarballs + live HTTP probes against Ledger's production CAL from this machine.
 
 Legend: **VERIFIED** = read in primary source or observed on the wire. **INFERRED** = follows from verified facts but not observed on a device.

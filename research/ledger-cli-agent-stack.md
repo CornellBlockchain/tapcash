@@ -1,5 +1,7 @@
 # Ledger CLI / "Agent Stack" — research note
 
+> **Correction (2026-10-10, source audit).** The installable packages are `@ledgerhq/multisig-cli` (bin `ledger-multisig-cli`) and `@ledgerhq/ledger-enterprise-cli`; the unscoped names are 404 (l.30); wallet-cli 2.9 never copies env into live-env, so EXPLORER has no effect (§8 item 8); analytics has no opt-out (§8 item 12). See `source-audit.md` §2 (M10), §4.4 and §5.
+
 Researched 2026-10-10 for the N3XT hackathon (deadline Oct 13 23:59 CEST). Desk research only: no hardware touched, nothing installed. Every fact is tagged **VERIFIED** (read in a primary source: Ledger docs, Ledger source code, npm registry, GitHub API) or **INFERRED** (my reading between the lines). Sources are numbered `[n]` and listed at the end.
 
 ## TL;DR

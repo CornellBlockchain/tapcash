@@ -1,5 +1,7 @@
 # Ledger Flex & Nano S Plus: hardware, NFC, BLE, and the "tap Ledger to Ledger" question
 
+> **Correction (2026-10-10, source audit).** The Recovery Key card applet source is public at `LedgerHQ/applet-recovery-key` (l.75, l.258). See `source-audit.md` §4.6.
+
 Research note for the N3XT hackathon (deadline 2026-10-13 23:59 CEST). Written 2026-10-10. No hardware touched, nothing installed.
 
 Legend: **VERIFIED** = read in a primary source (Ledger shop/docs/support, LedgerHQ GitHub, npm registry). **INFERRED** = derived from verified facts or from a search-engine snippet of a page I could not load. Gaps and contradictions are called out inline.

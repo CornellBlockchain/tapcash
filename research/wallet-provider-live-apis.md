@@ -1,5 +1,7 @@
 # Ledger Wallet Provider / Wallet API / Ledger Live integration — research note
 
+> **Correction (2026-10-10, source audit).** §1.3 (l.48-51) is wrong: ledger-button-core falls back to a built-in origin token when apiKey is empty, `devConfig.stub.dAppConfig` skips the remote dApp config, and `environment: 'staging'|'production'` exists. See `source-audit.md` §4.6 and §5.
+
 Date: 2026-10-10. Scope: what a dapp (or an AI agent) can do *through Ledger's own software* (Ledger Wallet, formerly Ledger Live; Ledger Wallet Provider SDK; Wallet API), versus talking to the device directly with DMK. Includes mobile (iOS/Android), Bluetooth and NFC facts for the Flex.
 
 Legend: **VERIFIED** = read in a primary source (Ledger docs, npm registry, GitHub source). **INFERRED** = reasoned from verified facts or secondary sources. Everything here was gathered with WebFetch/WebSearch only; nothing was installed or run.

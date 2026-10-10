@@ -1,5 +1,7 @@
 # Ledger Clear Signing and ERC-7730 — research note
 
+> **Correction (2026-10-10, source audit).** Default Speculos trusts Ledger's TEST PKI root, so the release Ethereum ELF should accept test-signed descriptors with no test-key app build (§3.3; end to end INFERRED); the hosted backend is `app.devicesdk.ledger-test.com`; Address Book needs Ethereum >= 1.23.0 and OS >= 1.7.0 (l.129, l.136). See `source-audit.md` §2 (M04, M05) and §5.
+
 Researched 2026-10-10 for the N3XT hackathon (deadline Oct 13 23:59 CEST). Hardware: Nano S Plus (USB), Flex (USB/BLE/NFC). Host: Windows 11.
 
 Tags: **VERIFIED** = read in a primary source (spec, docs page, source code, GitHub API). **INFERRED** = my conclusion from verified pieces, or a secondhand/search-snippet claim.

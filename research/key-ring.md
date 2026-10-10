@@ -1,5 +1,7 @@
 # Ledger Key Ring / "Ring CLI" — research note
 
+> **Correction (2026-10-10, source audit).** `@ledgerhq/ledger-key-ring-protocol` moved to `LedgerHQ/ts-libs` (l.25); Ledger ships a device-less enrolment UX, the LKRP QR-code pairing protocol, though wallet-cli does not expose it (l.14). See `source-audit.md` §4.4 and §5.
+
 Researched 2026-10-10 for the N3XT hackathon (deadline 2026-10-13 23:59 CEST). Web-only; no hardware touched, nothing installed.
 Tags: **VERIFIED** = read in a primary source (Ledger docs, ledger-live source, npm registry, whitepaper PDF). **INFERRED** = my reading between sources.
 

@@ -1,5 +1,7 @@
 # Jury & Ledger strategic direction — how to aim the project
 
+> **Correction (2026-10-10, source audit).** Only DMK Skills and wallet-cli have public source; the Enterprise and Multisig CLIs ship as bundled npm tarballs with private source, so do not call all four Agent Stack blocks open-source (l.148). See `source-audit.md` §5.
+
 Research note for the N3XT Hackathon @ OP3N 2026. Written 2026-10-10 from web sources only (no hardware touched, nothing installed). Every fact is tagged **VERIFIED** (read in a primary source: Ledger/Circle/Venice docs or blog, the person's own post or repo) or **INFERRED** (secondary press, or my reading of a primary source). Blunt about gaps.
 
 Rubric reminder (from HACKATHON.md): Technical execution 25 · Usefulness/relevance for Ledger 20 · Innovation 20 · UX 15 · New use cases for Ledger 10 · Clarity/docs 10. Four jurors, 5-min pitch + 5-min Q&A.

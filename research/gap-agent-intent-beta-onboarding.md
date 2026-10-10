@@ -1,5 +1,7 @@
 # Ledger Agent Intent (beta): can a 3-day hackathon project rely on it?
 
+> **Correction (2026-10-10, source audit).** On OS 1.7.0 the production catalog (provider 1) serves Ledger Sync 1.2.2; >= 1.3.0 (1.4.2) is only on provider 4, so plan on switching My Ledger to provider 4 rather than an automatic install. See `source-audit.md` §2 (M12).
+
 Researched 2026-10-10 from primary sources only (docs page, wallet-cli `develop` source, the vendored SDK tarball unpacked, the deployed frontend's JS bundles, GitHub PRs via authenticated `gh`, npm registry, Terms of Use). No hardware touched, nothing installed. Scratch copies of every file read are under the session scratchpad (`.../scratchpad/ai/`).
 
 Legend: **VERIFIED** = read in a primary source (code, docs, HTTP response). **INFERRED** = deduced from those sources; not executed end to end.

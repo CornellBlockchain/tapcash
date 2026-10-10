@@ -1,5 +1,7 @@
 # Key Ring: recovery, rotation and headless enrolment, resolved from primary sources
 
+> **Correction (2026-10-10, source audit).** Ledger Sync `GetSeedId` (m/99'/99') also returns an app attestation signed by a production-only key whose public key is in `app-ledger-sync/src/crypto_data.h`, verifiable offline. See `source-audit.md` §4.5, §4.8 and §5.
+
 Researched 2026-10-10 for the N3XT hackathon (deadline 2026-10-13 23:59 CEST). Web only; no hardware touched, nothing installed.
 Tags: **VERIFIED** = read in a primary source (whitepaper PDF, ledger-live source/docs, app-ledger-sync firmware source, Harness/rewall source). **INFERRED** = my reading across sources.
 
