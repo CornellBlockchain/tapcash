@@ -74,3 +74,25 @@ Workflow `ledger-spikes`, 5 agents, all in `spikes/<name>/README.md`:
 - Designed + judged I15 Minute Book (73.9, feasibility passes, originality refuted on Ledger's own multisig CLI but survives on minutes-as-object and two-officer roles) and I17 Release Seal (76.95, both reviewers pass). IDEAS.md §1/§3/§4/§7 updated.
 - Reconciled top 3: **I17 Release Seal** (= narrowed I11: ledgerd holds the publish credential, fires only on a Secure Screen signature over repo/version/destination/digest; ~130 lines on the reviewed proto core) · **I15 Minute Book** (two officers, two devices, countersigned minutes) · **I14 Consent Receipts** (patient story, lowest Day-1 risk, upgrade path = decrypt key moves into ledgerd).
 - Elapsed autonomous time ≈ 4.5 h. Nothing has touched a real device. Day-1 gate list: IDEAS.md §6.
+
+## 2026-10-10 — correction: docs-first research missed source-only capabilities
+
+Sahas pointed at `LedgerHQ/ledger-secure-sdk/lib_nfc` and at "Ledger VMs". Both were missed because the first sweep read docs and READMEs, not source. Verified inline from source (gh api, master branch, 2026-10-10):
+
+**NFC reader mode exists for third-party apps (Flex, Stax, Apex P).**
+- `lib_nfc/src/nfc_ledger.c`: `NFC_LEDGER_start(mode)` powers the front end as card emulation (`SEPROXYHAL_TAG_NFC_POWER_ON_CE`, packets `OS_IO_PACKET_TYPE_NFC_APDU` 0x40) or reader (`SEPROXYHAL_TAG_NFC_POWER_ON_READER`, `OS_IO_PACKET_TYPE_NFC_APDU_RSP` 0x41). Refuses unless NFC is enabled in device settings (`OS_SETTING_FEATURES_NFC_ENABLED`).
+- `Makefile.standard_app`: `ENABLE_NFC = 1` → `HAVE_NFC` + `lib_nfc` (+ `HAVE_APPLICATION_FLAG_BOLOS_SETTINGS`); `ENABLE_NFC_READER = 1` → `HAVE_NFC_READER`. Both only for `TARGET_STAX TARGET_FLEX TARGET_APEX_P`.
+- App-level reader API in `io_legacy/include/os_io_legacy.h` + `src/os_io_legacy.c` (under `HAVE_NFC_READER`): `io_nfc_reader_start(nfc_evt_callback_t)`, `io_nfc_reader_send(cmd, len, nfc_resp_callback_t, timeout_ms)`, `io_nfc_reader_stop()`, `io_nfc_is_reader()`. Events `CARD_DETECTED` (with `card_info{tech NFC_A|NFC_B, nfcid[7]}`) and `CARD_REMOVED`; response callback `(error, timeout, data, len)`; 100 ms ticker timeouts; card removed mid-APDU → error callback. Routed from `io/src/os_io.c` (`SEPROXYHAL_TAG_NFC_EVENT`, `ITC_IO_NFC_START_READER` 0x12).
+- `lib_nfc/include/nfc_ndef.h`: `os_parse_ndef`, `os_ndef_to_string`, `os_get_uri_header`; NDEF TEXT/URI records, text ≤ 215 chars.
+- `lib_nfc/doc/mainpage.dox` still says "only available on Stax" and "TO BE COMPLETED" — stale.
+- Every LedgerHQ app Makefile checked (boilerplate, ethereum, passwords, aleo, canton, exchange, hyperliquid, ledger-sync, nbgl-tests, nem, ont, openpgp, recovery-check, vechain, xrp) has `#ENABLE_NFC = 1` commented out; `app-security-key` has it on. GitHub code search finds no app using `io_nfc_reader_*` outside the SDK and Speculos's vendored copy.
+- Speculos: `speculos/mcu/transport/nfc.py` handles host→device card-emulation APDUs (MTU 140; `NFC_APDU_EVENT` 0x1C, `NFC_EVENT` 0x1E); vendored `os_io.c` compiles `HAVE_NFC_READER`. Reader-mode emulation support: under investigation.
+- Consequence: a single Flex running a custom C app can act as an NFC reader (cards, Type 4 tags, Android HCE phones, another NFC Ledger in card mode). The earlier verdict "Ledger-to-Ledger NFC impossible with our hardware" was wrong in its reasoning: the counterparty does not have to be a Ledger. Rust SDK still has no NFC (C app required).
+
+**"Ledger VMs" = `LedgerHQ/vanadium`** (pushed 2026-10-09, 44★): "a Risc-V Virtual Machine that runs in an embedded Secure Element". V-Apps run inside the SE; the untrusted host stores encrypted, authenticated memory pages, so V-Apps are not limited by device memory. Written in Rust (`riscv32imac-unknown-none-elf`), tooling `cargo-vnd`, runs natively, on Speculos, or on device. README: "EXPERIMENTAL ... INSECURE AT THIS STAGE". Earlier answer that "Ledger VMs" meant Speculos was wrong.
+
+**Also never looked at:** `applet-recovery-key` (JavaCard applet of the Ledger Recovery Key — a Ledger-made NFC smartcard counterparty), `ledger-button-public`, `ledger-wallet-dx`, `dale`, `nano-sniffer`, `ledgered`, `lumen` (design system), `ts-libs`, `npm-attest-lab`, `exchange-sdk`, `web3allowlist`. 230 active public LedgerHQ repos total.
+
+**Running now:**
+- Workflow `ledger-nfc-reader-deep-dive` → `research/nfc-reader-mode.md`, corrections in NFC notes, NFC ideas in IDEAS.md.
+- Workflow `ledger-source-audit` (8 clusters: vanadium, secure-sdk, device-sdk-ts, ledger-live, apps catalog, tooling/misc, docs sitemap diff, products/APIs) → verify → re-ideate → `research/source-audit.md`, `research/vanadium.md`, IDEAS.md §8.
