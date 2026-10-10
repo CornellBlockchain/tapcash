@@ -43,8 +43,9 @@ const eth = new SignerEthBuilder({ dmk, sessionId }).build();
 // Speculos has no dashboard, so it is always skipOpenApp.
 let opened = TRANSPORT !== "hid";
 const getAddr = () => run(eth.getAddress(PATH, { checkOnDevice: false, skipOpenApp: opened }));
-// If a previous run died mid-review the first APDU is refused with 0x6980 and the app drops home; retry once.
-const { address } = await getAddr().catch((e) => e.cause?.originalError?.errorCode === "6980" ? getAddr() : Promise.reject(e));
+// After a refused/invalid request the next APDU is answered 0x6980 and the app drops home; retry once (startup and every sign).
+const retry6980 = (fn) => fn().catch((e) => e.cause?.originalError?.errorCode === "6980" ? fn() : Promise.reject(e));
+const { address } = await retry6980(getAddr);
 opened = true;
 log(`connected ${dmk.getConnectedDevice({ sessionId }).name} model=${model} address=${address}`);
 
@@ -57,13 +58,15 @@ http.createServer(async (req, res) => {
   const send = (code, obj) => { res.writeHead(code, { "content-type": "application/json" }); res.end(JSON.stringify(obj)); };
   if (req.method === "GET" && req.url === "/address") return send(200, { address, model });
   if (req.method === "POST" && req.url === "/approve") {
+    if (!/^application\/json/.test(req.headers["content-type"] ?? "")) return send(415, { ok: false, reason: "content-type must be application/json" });   // a browser page cannot POST this without a failed preflight
     let text;
     try { text = JSON.parse(await body(req)).text; } catch { /* fallthrough */ }
     if (typeof text !== "string" || !text) return send(400, { ok: false, reason: "text required" });
     const t0 = Date.now();
     try {
-      const sig = await serial(() => run(eth.signMessage(PATH, text, { skipOpenApp: true })));
-      const signature = toSig(sig);
+      const signature = toSig(await serial(() => retry6980(() => run(eth.signMessage(PATH, text, { skipOpenApp: true })))));
+      // Caller gone (hook aborted before its timeout): nobody gets this signature. The prompt stayed on the device until the human answered.
+      if (req.socket.destroyed) { log(`approve orphaned, signature discarded ${Date.now() - t0}ms ${JSON.stringify(text)}`); return; }
       log(`approve ok ${Date.now() - t0}ms ${JSON.stringify(text)}`);
       return send(200, { ok: true, address, model, signature, text });
     } catch (e) {

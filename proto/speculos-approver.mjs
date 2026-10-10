@@ -37,7 +37,7 @@ for (;;) {
     else if (find(/^\d+ of \d+$/) || find(/^Swipe to/i)) { console.error("  -> swipe left"); await swipeLeft(); }
   } else {
     const approveHere = find(/^(Sign message|Sign typed message|Sign|Accept and send|Maybe later|Accept risk)$/i) || find(/^Accept risk and sign/i) || /both buttons/i.test(txt);
-    const rejectHere = find(/^(Reject|Cancel)$/i);
+    const rejectHere = find(/^(Reject( message| transaction)?|Cancel)$/i);   // nano's last review page is "Reject message"
     if ((REJECT && rejectHere) || (!REJECT && approveHere)) { console.error("  -> both"); await button("both"); }
     else { console.error("  -> right"); await button("right"); }
   }

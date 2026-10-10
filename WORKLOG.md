@@ -59,3 +59,12 @@ Workflow `ledger-spikes`, 5 agents, all in `spikes/<name>/README.md`:
 - API_LEVEL 27 (`ledger_device_sdk 1.37.1`, `ledger_secure_sdk_sys 1.16.4`, nightly-2025-12-05). Day-1 check against device OS via `ledgerctl info`; 0x511F = mismatch.
 - Sideload command ready: `spikes/ledgerblue-and-app-toolchain/sideload.ps1 -Device flex -Load`.
 - Consequence for IDEAS.md: I06's "Sunday-noon gate" is now only the real-device install question; toolchain + review UI + CI are proven.
+
+## 2026-10-10 04:30 — prototype reviewed and fixed
+
+- `proto/` built → adversarially reviewed (9 findings, 4 high) → fixed. `npm test` green on Speculos Flex and Nano S Plus from a clean state.
+- High findings fixed: hook failed open on timeout/crash (now `onFailure: "block"`, try/catch → exit 2, 280 s abort); command text was truncated to 160 chars hiding the dangerous tail (now never truncated, refused if >400 or non-ASCII/multiline); hook and verifier trusted whatever answered on :7777 (now `LEDGER_ADDRESS` pinned out of band, signature verified in the hook); regex denylist beaten 37/41 (now an allowlist of read-only verbs per `;`/`&&`/`||`/`|` segment, everything else goes to the device).
+- Medium fixed: chain bound into the signed text (`tier <prev8> <cmd> cwd:`), signed CHECKPOINT so truncation is detectable; 0x6980 retry after a bad byte; vacuous test assertion.
+- Remaining honest limits (in proto/README): `node script` / `npm test` are tier0 and run whatever the repo contains; only Bash/PowerShell/Edit/Write hooked; no log lock; ledgerd unauthenticated locally; tier2 co-sign TODO; real HID untested.
+- Collateral to flag: while killing a hung test the fix agent's PowerShell filter matched `@modelcontextprotocol/server-pdf` and killed ~14 node processes belonging to other Claude sessions' pdf MCP server.
+- Added `README.md` index. Untracked `proto/log/session.jsonl`.
