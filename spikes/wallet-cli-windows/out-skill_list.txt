@@ -1,0 +1,6 @@
+wallet-cli-usage  Official Ledger wallet-cli - USB-based CLI for Ledger hardware wallet flows (account discover, receive, balances, operations, send, swap quote/execute/status, genuine-check, assets token / token-by-id), the Ledger Key Ring (ring init/encrypt/decrypt/keys/destroy — LKRP-backed encryption of files and text), and Agent Intent (agent-intent enroll/recover/list/show/sync/send — enroll or recover a remote agent's software identity, import the Ledger Sync accounts it was granted and propose EVM payments for human review, no device required, never broadcasts, a separate trust model from `ring`). Use for any wallet-cli command execution and for mapping informal requests to the right command.
+
+real	0m2.176s
+user	0m0.091s
+sys	0m0.244s
+exit=0

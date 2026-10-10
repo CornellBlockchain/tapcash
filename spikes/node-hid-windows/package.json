@@ -1,0 +1,22 @@
+{
+  "name": "hid-windows",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "discover": "node discover.mjs",
+    "address": "node connect-and-get-address.mjs"
+  },
+  "keywords": [],
+  "type": "module",
+  "private": true,
+  "dependencies": {
+    "@ledgerhq/device-management-kit": "^1.11.0",
+    "@ledgerhq/device-signer-kit-ethereum": "^1.18.1",
+    "@ledgerhq/device-transport-kit-node-hid": "^1.0.1"
+  },
+  "allowScripts": {
+    "node-hid@3.4.0": true,
+    "usb@2.19.1": true
+  }
+}

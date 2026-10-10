@@ -1,0 +1,35 @@
+### Browser exe versions
+Edge : C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe : 154.0.4258.62
+Chrome : C:\Program Files\Google\Chrome\Application\chrome.exe : 153.0.8010.53
+### Chrome BLBeacon / Edge version registry
+Chrome HKCU BLBeacon version = 153.0.8010.53
+Edge HKCU BLBeacon version = 154.0.4258.62
+### Policy keys (Chrome/Edge, HKLM+HKCU)
+[HKLM:\SOFTWARE\Policies\Google\Chrome] EXISTS
+
+ExtensionManifestV2Availability : 2
+PSPath                          : Microsoft.PowerShell.Core\Registry::HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Google\Chrome
+PSParentPath                    : Microsoft.PowerShell.Core\Registry::HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Google
+PSChildName                     : Chrome
+PSDrive                         : HKLM
+PSProvider                      : Microsoft.PowerShell.Core\Registry
+
+
+[HKLM:\SOFTWARE\Policies\Microsoft\Edge] absent
+[HKLM:\SOFTWARE\Policies\Google\Chrome\Recommended] absent
+[HKLM:\SOFTWARE\Policies\Microsoft\Edge\Recommended] absent
+[HKCU:\SOFTWARE\Policies\Google\Chrome] absent
+[HKCU:\SOFTWARE\Policies\Microsoft\Edge] absent
+[HKCU:\SOFTWARE\Policies\Google\Chrome\Recommended] absent
+[HKCU:\SOFTWARE\Policies\Microsoft\Edge\Recommended] absent
+### Relevant policy names to look for: DefaultWebHidGuardSetting, WebHidAllowAllDevicesForUrls, WebHidAskForUrls, WebHidBlockedForUrls, DefaultWebBluetoothGuardSetting, WebBluetoothBlockedForUrls, DefaultWebUsbGuardSetting, WebAuthenticationRemoteProxiedRequestsAllowed, DefaultMediaStreamSetting, VideoCaptureAllowed, AudioCaptureAllowed
+### Chrome Local State: enabled labs experiments (flags) per profile dir
+[C:\Users\sahas\AppData\Local\Google\Chrome\User Data\Local State] enabled_labs_experiments = enable-gpu-rasterization@1, enable-parallel-downloading@1, enable-tab-audio-muting@1, ignore-gpu-blocklist, smooth-scrolling@1
+[C:\Users\sahas\AppData\Local\Microsoft\Edge\User Data\Local State] enabled_labs_experiments = 
+### Chrome/Edge running?
+
+Name   Count
+----   -----
+chrome    60
+
+

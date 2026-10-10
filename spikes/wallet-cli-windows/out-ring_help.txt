@@ -1,0 +1,17 @@
+{
+  "ok": true,
+  "data": {
+    "type": "help",
+    "cliName": "wallet-cli",
+    "version": "2.9.0",
+    "path": [
+      "ring"
+    ],
+    "text": "Usage: wallet-cli ring [options]\n\nLedger Key Ring — trustless, hardware-rooted encryption for files and text (LKRP)\n\nSubcommands:\n  init     Set up this machine as a Ledger Key Ring member, creating or\n           recovering a trustchain (device required).\n  encrypt  Encrypt data with a key from your Ledger Key Ring. Files via -i/-o,\n           text via stdin/stdout.\n  decrypt  Decrypt data with a key from your Ledger Key Ring. Files via -i/-o,\n           text via stdin/stdout.\n  keys     List the keys you've used on your Ledger Key Ring (local cache, no\n           network).\n  destroy  Tear down your Ledger Key Ring on LKRP and wipe local member\n           credentials."
+  }
+}
+
+real	0m2.179s
+user	0m0.167s
+sys	0m0.231s
+exit=0

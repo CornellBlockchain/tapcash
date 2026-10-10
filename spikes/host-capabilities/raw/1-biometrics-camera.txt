@@ -1,0 +1,135 @@
+### Get-PnpDevice -Class Camera,Image,Biometric
+
+Class  Status FriendlyName      InstanceId
+-----  ------ ------------      ----------
+Camera OK     Integrated Camera USB\VID_04F2&PID_B7B6&MI_00\6&16F8534&1&0000
+
+
+### Camera device properties (hardware ids)
+Integrated Camera :: USB\VID_04F2&PID_B7B6&REV_0011&MI_00 | USB\VID_04F2&PID_B7B6&MI_00
+### Any PnP device with IR/Infrared/Hello/Biometric in name
+
+Class             Status FriendlyName
+-----             ------ ------------
+SoftwareComponent OK     Intel(R) Dynamic Application Loader Host Interface
+System            OK     Microsoft Windows Management Interface for ACPI
+System            OK     Microsoft Windows Management Interface for ACPI
+System            OK     Microsoft Windows Management Interface for ACPI
+System            OK     Microsoft Windows Management Interface for ACPI
+System            OK     Microsoft Windows Management Interface for ACPI
+System            OK     Microsoft Windows Management Interface for ACPI
+System            OK     Microsoft Windows Management Interface for ACPI
+System            OK     Intel(R) Management Engine Interface #1
+System            OK     System Interface Foundation V2 Device
+
+
+### HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\WinBio (recursive)
+[HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\WinBio\AccountInfo]
+
+[HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\WinBio\AccountInfo\.DEFAULT]
+
+EnrolledFactors : 0
+PSPath          : Microsoft.PowerShell.Core\Registry::HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\WinBio\AccountInfo\.DEFAULT
+PSParentPath    : Microsoft.PowerShell.Core\Registry::HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\WinBio\AccountInfo
+PSChildName     : .DEFAULT
+PSProvider      : Microsoft.PowerShell.Core\Registry
+
+
+[HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\WinBio\AccountInfo\.DEFAULT\Policy]
+
+[HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\WinBio\AccountInfo\.DEFAULT\Policy\00000002]
+
+AntiSpoofing : 0
+PSPath       : Microsoft.PowerShell.Core\Registry::HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\WinBio\AccountInfo\.DEFAULT\Policy\00000002
+PSParentPath : Microsoft.PowerShell.Core\Registry::HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\WinBio\AccountInfo\.DEFAULT\Policy
+PSChildName  : 00000002
+PSProvider   : Microsoft.PowerShell.Core\Registry
+
+
+[HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\WinBio\AccountInfo\.DEFAULT\Policy\00000004]
+
+AntiSpoofing : 0
+PSPath       : Microsoft.PowerShell.Core\Registry::HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\WinBio\AccountInfo\.DEFAULT\Policy\00000004
+PSParentPath : Microsoft.PowerShell.Core\Registry::HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\WinBio\AccountInfo\.DEFAULT\Policy
+PSChildName  : 00000004
+PSProvider   : Microsoft.PowerShell.Core\Registry
+
+
+[HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\WinBio\AccountInfo\.DEFAULT\Policy\00000008]
+
+AntiSpoofing : 0
+PSPath       : Microsoft.PowerShell.Core\Registry::HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\WinBio\AccountInfo\.DEFAULT\Policy\00000008
+PSParentPath : Microsoft.PowerShell.Core\Registry::HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\WinBio\AccountInfo\.DEFAULT\Policy
+PSChildName  : 00000008
+PSProvider   : Microsoft.PowerShell.Core\Registry
+
+
+[HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\WinBio\AccountInfo\.DEFAULT\Policy\00000010]
+
+AntiSpoofing : 0
+PSPath       : Microsoft.PowerShell.Core\Registry::HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\WinBio\AccountInfo\.DEFAULT\Policy\00000010
+PSParentPath : Microsoft.PowerShell.Core\Registry::HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\WinBio\AccountInfo\.DEFAULT\Policy
+PSChildName  : 00000010
+PSProvider   : Microsoft.PowerShell.Core\Registry
+
+
+[HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\WinBio\SensorInfo]
+
+AvailableFactors : 0
+PSPath           : Microsoft.PowerShell.Core\Registry::HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\WinBio\SensorInfo
+PSParentPath     : Microsoft.PowerShell.Core\Registry::HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\WinBio
+PSChildName      : SensorInfo
+PSProvider       : Microsoft.PowerShell.Core\Registry
+
+
+root props:
+
+SecureBioAvailabilityInCensus   : 76
+ESSCapableOnLastStart           : 0
+PeripheralsWithESSPreviousValue : 0
+PSPath                          : Microsoft.PowerShell.Core\Registry::HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\WinBio
+PSParentPath                    : Microsoft.PowerShell.Core\Registry::HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion
+PSChildName                     : WinBio
+PSDrive                         : HKLM
+PSProvider                      : Microsoft.PowerShell.Core\Registry
+
+
+### HKLM:\SOFTWARE\Policies\Microsoft\Biometrics
+ERR: Requested registry access is not allowed.
+### Windows Hello enrolment hints: HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Authentication\LogonUI\FaceLogonAvailable etc
+
+ShowTabletKeyboard      : 0
+LastLoggedOnDisplayName : Sahas G
+LastLoggedOnProvider    : {D6886603-9D2F-4EB2-B667-1971041FA96B}
+LastLoggedOnSAMUser     : .\sahas
+LastLoggedOnUser        : .\sahas
+LastLoggedOnUserSID     : S-1-5-21-3160518985-58359394-1572162491-1001
+SelectedUserSID         : S-1-5-21-3160518985-58359394-1572162491-1001
+IdleTime                : 398875
+PSPath                  : Microsoft.PowerShell.Core\Registry::HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\Authentication\LogonUI
+PSParentPath            : Microsoft.PowerShell.Core\Registry::HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\Authentication
+PSChildName             : LogonUI
+PSDrive                 : HKLM
+PSProvider              : Microsoft.PowerShell.Core\Registry
+
+
+### WinBio service status
+
+Name      : WbioSrvc
+Status    : Stopped
+StartType : Manual
+
+
+### WinBio database dir (count of enrolled templates; needs admin, may fail)
+
+Name                                     Length LastWriteTime
+----                                     ------ -------------
+51F39552-1075-4199-B513-0C10EA185DB0.DAT   1144 9/5/2024 11:27:41 AM
+
+
+### Windows Hello for Business / NGC key container present (per-user Hello PIN enrolled?)
+ERR: Access to the path 'C:\Windows\ServiceProfiles\LocalService\AppData\Local\Microsoft\Ngc' is denied.
+### WinRT UserConsentVerifier.CheckAvailabilityAsync (read-only)
+ERR WinRT: Unable to find type [Windows.Security.Credentials.UI.UserConsentVerifier,Windows.Security.Credentials.UI, ContentType=WindowsRuntime].
+### KeyCredentialManager.IsSupportedAsync (Hello PIN/bio set up for this user?)
+ERR WinRT: Unable to find type [Windows.Security.Credentials.KeyCredentialManager,Windows.Security.Credentials, ContentType=WindowsRuntime].

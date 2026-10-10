@@ -1,0 +1,49 @@
+### Get-PnpDevice -Class AudioEndpoint
+
+Status  FriendlyName                        InstanceId
+------  ------------                        ----------
+OK      Speakers (Realtek(R) Audio)         SWD\MMDEVAPI\{0.0.0.00000000}.{5CCE5D2E-0CDB-47B2-BA8E-433CB14B10B9}
+Unknown Headphones (WH-1000XM5)             SWD\MMDEVAPI\{0.0.0.00000000}.{9FB9F3D8-11AD-452F-BFD3-FE2E1D70C245}
+Unknown Headset (WH-1000XM5 Hands-Free)     SWD\MMDEVAPI\{0.0.0.00000000}.{6B69F722-E438-49A6-8C72-77E5636AFCB4}
+OK      Speakers (Steam Streaming Speakers) SWD\MMDEVAPI\{0.0.0.00000000}.{14B90E99-F057-4383-AFDF-D8B370B92DD7}
+Unknown Headset (WH-1000XM5)                SWD\MMDEVAPI\{0.0.1.00000000}.{FA039082-70BC-413B-8D6E-1B334DA5C605}
+OK      Microphone Array (Realtek(R) Audio) SWD\MMDEVAPI\{0.0.1.00000000}.{88EA427D-7AE8-4139-A6D7-6DAB2F175D37}
+
+
+### Get-PnpDevice -Class MEDIA (audio controllers)
+
+Status  FriendlyName
+------  ------------
+OK      Microsoft Streaming Service Proxy
+OK      Nahimic VAD
+OK      Nahimic Easy Surround device
+OK      Nahimic mirroring device
+OK      Realtek(R) Audio
+OK      WH-1000XM5
+OK      WH-1000XM5 Hands-Free
+OK      NVIDIA High Definition Audio
+OK      Sahas’s AirPods Pro
+OK      Sahas’s AirPods Pro Hands-Free
+OK      Steam Streaming Speakers
+OK      NVIDIA Virtual Audio Device (Wave Extensible) (WDM)
+Unknown Microsoft Streaming Clock Proxy
+
+
+### Win32_SoundDevice
+
+Name                                                Status Manufacturer
+----                                                ------ ------------
+Nahimic VAD                                         OK     Nahimic
+Nahimic Easy Surround device                        OK     Nahimic
+Nahimic mirroring device                            OK     Nahimic
+Realtek High Definition Audio(SST)                  OK     Realtek
+NVIDIA High Definition Audio                        OK     NVIDIA
+Steam Streaming Speakers                            OK     Valve Corporation Audio DDK
+NVIDIA Virtual Audio Device (Wave Extensible) (WDM) OK     NVIDIA
+
+
+### Microphone privacy consent (HKCU ConsentStore\microphone / webcam)
+[microphone] Allow
+[webcam] Allow
+[HKLM microphone] Allow
+[HKLM webcam] Allow

@@ -1,0 +1,19 @@
+UserConsentVerifier.CheckAvailabilityAsync = Available
+KeyCredentialManager.IsSupportedAsync = True   (true = Hello PIN/bio set up for this user => WebAuthn platform authenticator available)
+
+### Credential provider GUID decode: LastLoggedOnProvider {D6886603-9D2F-4EB2-B667-1971041FA96B}
+NGC Credential Provider
+### Face/fingerprint credential providers present on system?
+FaceCredentialProvider {8AF662BF-65A0-4D0A-A540-A338A999D36F} = FaceCredentialProvider
+WinBio (fingerprint) CredentialProvider {BEC09223-B018-416D-A0AC-523971B639F5} = WinBio Credential Provider
+
+### USB enum sanity: total VID_ keys readable, and any 2C97
+USB enum keys readable: 13; VID_2C97 keys: 0
+
+### Camera USB function interfaces for VID_04F2&PID_B7B6 (IR cams usually expose a 2nd MI_ interface)
+VID_04F2&PID_B7B6 -> @usb.inf,%usb\composite.devicedesc%;USB Composite Device
+VID_04F2&PID_B7B6&MI_00 -> @oem119.inf,%rtsuvc.devicedesc%;Integrated Camera
+VID_04F2&PID_B7B6&MI_02 -> @winusb.inf,%usb\ms_comp_winusb.devicedesc%;WinUsb Device
+
+### Camera frame-server: supported media types / is there an IR sensor via Windows.Devices.Enumeration? (skipped: requires WinRT async in 5.1; the PnP + MI_ check above is sufficient)
+

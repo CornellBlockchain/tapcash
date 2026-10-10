@@ -1,0 +1,6 @@
+No accounts in session. Run `account discover` first.
+
+real	0m1.200s
+user	0m0.122s
+sys	0m0.107s
+exit=0

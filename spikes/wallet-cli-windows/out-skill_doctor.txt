@@ -1,0 +1,7 @@
+wallet-cli-usage  missing  installed none -> shipped 2.9.0@39cea9e6  C:\Users\sahas\Github Repos\ledger-op3n-n3xt-hackathon-26\spikes\wallet-cli-windows\.claude\skills
+1 skill(s) still drifting.
+
+real	0m1.247s
+user	0m0.075s
+sys	0m0.106s
+exit=1

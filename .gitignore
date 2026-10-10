@@ -1,0 +1,8 @@
+node_modules/
+.venv/
+untrusted-downloads/
+spikes/ledgerblue-and-app-toolchain/app-boilerplate-rust/
+*.log
+!spikes/speculos-dmk-sign/run13-flex.log
+!spikes/speculos-dmk-sign/run14-nanos2.log
+.claude/skills/

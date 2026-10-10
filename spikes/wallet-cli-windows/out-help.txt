@@ -1,0 +1,15 @@
+{
+  "ok": true,
+  "data": {
+    "type": "help",
+    "cliName": "wallet-cli",
+    "version": "2.9.0",
+    "path": [],
+    "text": "wallet-cli v2.9.0\nLedger Wallet CLI\n\nCommands:\n  account        Account management commands\n  agent-intent   Enroll and manage Agent Intent profiles for AI agents\n                 proposing EVM payments for human review, and sync their Ledger\n                 Sync accounts.\n  assets         Crypto-assets store queries (resolve tokens by address or id)\n  balances       Fetch native and token balances for an account (no device\n                 required)\n  earn           Earn (staking & DeFi yield) commands\n  genuine-check  Check whether the connected Ledger device is genuine\n  operations     List operations for an account (no device required)\n  receive        Get receive address for an account (optionally verify on\n                 device)\n  ring           Ledger Key Ring — trustless, hardware-rooted encryption for\n                 files and text (LKRP)\n  send           Sign and broadcast a transaction\n  session        Session management commands\n  skill          Ledger wallet-cli agent skills (list, retrieve, install,\n                 doctor)\n  swap           Swap-related commands"
+  }
+}
+
+real	0m2.265s
+user	0m0.153s
+sys	0m0.184s
+exit=0
