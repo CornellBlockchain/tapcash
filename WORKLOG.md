@@ -51,3 +51,11 @@ Workflow `ledger-spikes`, 5 agents, all in `spikes/<name>/README.md`:
 - Codex (read-only) reviewed IDEAS.md against research/ and spikes/. Accepted: calendar was wrong (Oct 10 is Saturday; Oct 12–13 are mentor days); hook timeouts do not block by default so the hook cannot be the enforcement point; I06 over-ranked; I15 under-ranked; new candidate I17 Release Seal. Design consequence: the daemon must hold the privileged credential and act only on a valid device signature (nonce + expiry + artifact digest). Recorded as IDEAS.md §7; dates relabelled.
 - Pulled `ghcr.io/ledgerhq/ledger-app-builder/ledger-app-dev-tools:latest`; building unmodified `app-boilerplate-rust` for flex + nanosplus and running it in Speculos (agent in progress).
 - Prototype of the shared approval core (`proto/`: ledgerd + Claude Code hook + verifier on Speculos) in progress; its review phase will be re-run against the §7 punctures.
+
+## 2026-10-10 04:00 — custom device app builds and runs (emulator)
+
+- Unmodified `app-boilerplate-rust` v1.9.1 built in `ledger-app-dev-tools` for flex (35 s, 270 KB ELF) and nanosplus (29 s, 191 KB ELF), no fixes needed. Command needs `MSYS_NO_PATHCONV=1` under Git Bash.
+- Speculos flex: GET_VERSION → `0109019000`; GET_APP_NAME → "app-boilerplate-rust"; hand-driven SIGN_TX approved via `/finger` → DER signature, SW 9000. Review screen renders NBGL name/value fields ("Amount / CRAB 777", "Destination / 0xDE0B…"). Repo's ragger tests: 5 passed headless inside the image.
+- API_LEVEL 27 (`ledger_device_sdk 1.37.1`, `ledger_secure_sdk_sys 1.16.4`, nightly-2025-12-05). Day-1 check against device OS via `ledgerctl info`; 0x511F = mismatch.
+- Sideload command ready: `spikes/ledgerblue-and-app-toolchain/sideload.ps1 -Device flex -Load`.
+- Consequence for IDEAS.md: I06's "Sunday-noon gate" is now only the real-device install question; toolchain + review UI + CI are proven.
