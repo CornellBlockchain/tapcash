@@ -142,6 +142,13 @@ const transportUSB = await TransportUSB.create();
 
 ## 5. On-device NFC API (the part nobody documents)
 
+> **Correction (2026-10-10).** This section and the NFC conclusions elsewhere in this note are superseded by `nfc-reader-mode.md`. What was wrong:
+> - Reader mode is not "documented beyond a header file" only. The SDK has a full app-level reader API (`io_nfc_reader_start` / `io_nfc_reader_send` / `io_nfc_reader_stop`, `CARD_DETECTED` / `CARD_REMOVED` events) in `io_legacy/`, added by PR #777 (2024-12-12) and fixed by #987 and #1044. No production app uses it (PR #1243).
+> - The API only delivers events to an app that runs its own IO stack: build with `ENABLE_NFC=1 ENABLE_NFC_READER=1 DISABLE_OS_IO_STACK_USE=1`. Missing the last flag compiles fine and the callbacks never fire.
+> - §1 bullets 1-2, the §6 table row ("zero precedent", two Flex units needed) and the §8 verdict ("not with this hardware") are wrong in their reasoning. The counterparty need not be a Ledger: one Flex in reader mode can talk to an Android HCE phone, a Type 4 tag, a JavaCard or a bank card. Only a true Ledger-to-Ledger demo still needs a second NFC Ledger.
+> - §3.2: the Recovery Key reader flow runs in BOLOS, not through this app API, and the applet source is public (`LedgerHQ/applet-recovery-key`). §9 gap 2 is answered there.
+> - §3.1: the SDK's factory default for the NFC feature bit is on (`include/os_settings.h:164`), so "disabled by default" is unconfirmed.
+
 Source: `LedgerHQ/ledger-secure-sdk` master, all VERIFIED by reading raw files.
 
 ### 5.1 Build flags (`Makefile.standard_app`)

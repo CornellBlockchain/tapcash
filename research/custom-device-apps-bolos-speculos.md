@@ -202,6 +202,13 @@ One-shot form: `docker run --rm -v "$(Get-Location):/app" ghcr.io/ledgerhq/ledge
 
 ## 6. NFC from a device app (the key finding for idea #2)
 
+> **Correction (2026-10-10).** See `nfc-reader-mode.md`, which supersedes this section's reader-mode and Ledger-to-Ledger conclusions. What was wrong:
+> - Reader mode is not "undocumented" in the sense of unimplemented. The app API (`io_nfc_reader_start` / `io_nfc_reader_send` / `io_nfc_reader_stop`) is in `io_legacy/`, maintained by Ledger (PRs #777, #987, #1044; rename pending in #1243), and unused by any production app.
+> - §6.1 line on `io/src/os_io.c` ("no extra code"): that app-side `os_io_rx_evt` is compiled out under the default `USE_OS_IO_STACK`. The reader dispatch only exists with `DISABLE_OS_IO_STACK_USE=1`, and stock Speculos `--transport NFC` delivers NFC APDUs only to own-stack builds, even in card emulation. `app-security-key` sets that flag (Makefile:163).
+> - §0 item 4 and §6.2 ("Ledger-to-Ledger impossible", "nothing public demonstrates reader mode"): one Flex in reader mode can talk to an Android HCE phone, a Type 4 tag, a JavaCard or a bank card. Only a two-Ledger demo needs a second NFC Ledger.
+> - §6.2's Day-2 probe with a plain `ENABLE_NFC=1` build can give a false negative; add `DISABLE_OS_IO_STACK_USE=1`. Stock Speculos exits on `io_nfc_reader_start` (unknown SEPH tag 0x5D); a patch recipe is in `nfc-reader-mode.md` §5.
+> - §1.3: the Rust SDK still has no NFC, but a third-party Rust CE app exists (`structured-passkeys` PR #20, merged 2026-10-04), so a custom NFC app would not be the first third-party one. A reader app would be.
+
 ### 6.1 C SDK facts  VERIFIED
 - `Makefile.standard_app`:
   ```make

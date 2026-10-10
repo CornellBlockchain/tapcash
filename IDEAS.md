@@ -31,18 +31,30 @@ Strongest reframe: I01 Echo, "what you hear is what you sign". One utterance, on
 
 ### Ledger-to-Ledger NFC payments by tapping devices
 
-What is impossible (`research/device-capabilities-nfc-ble.md`, `research/custom-device-apps-bolos-speculos.md` §6):
+Corrected 2026-10-10 after reading the SDK source (`research/nfc-reader-mode.md`). The earlier verdict said Flex-to-Flex needed "the undocumented `ENABLE_NFC_READER`" and was research-grade. That was wrong in its reasoning: the counterparty of a tap does not have to be a Ledger, and the reader API is real. §1, the I02 + I03 combination in §5 and open question 11 in §6 predate this correction; §6 Q11's probe with a plain `ENABLE_NFC=1` build would give a false negative, so use the N1 gate below instead.
 
-- The Nano S Plus has no NFC radio, no Bluetooth and no battery. One of the two devices cannot take part in any wireless link.
-- No host SDK exposes an NFC transport. DMK, ledgerjs and wallet-cli have USB, HID, WebUSB, BLE and Speculos transports. Nothing talks NFC to a Ledger today except a phone's FIDO stack (Security Key app) and the Recovery Key card.
-- Flex to Flex would need two Flex units, a custom C app built with `ENABLE_NFC` on one side and the undocumented `ENABLE_NFC_READER` on the other, and a protocol of your own. The lib_nfc doc says "TO BE COMPLETED". Research-grade, not hackathon-grade.
+What is still impossible:
 
-What survives: one real NFC tap with the Flex as the card and a phone as the reader. Two forms exist:
+- The Nano S Plus has no NFC radio, no Bluetooth and no battery. It cannot take part in any tap. Its honest role is the payee's cold key, signing a payment request once over USB with the stock Ethereum app.
+- No host SDK exposes an NFC transport (DMK and Ledger Wallet trees have no NFC path, verified). Only device apps and phones speak NFC to a Ledger.
+- A two-Ledger tap on stage needs a second NFC Ledger (Flex, Stax or Nano Gen5) that we do not own.
 
-- Stock app, zero firmware: the Security Key app (FIDO2) answers a WebAuthn assertion over NFC from an iPhone or an Android 14+ phone, and the Flex shows the RP and user on its E Ink. Verified only for iPhone plus webauthn.io (`research/hardware-security-fido-pgp-ssh.md`). This is I02 (the payee taps to attest their receive address, the payer signs USDC on the Nano S Plus) and I08 (tap your Flex on your phone to approve a remote agent).
-- Custom C app with `ENABLE_NFC=1`: the phone taps the Flex, the Flex hashes an EIP-3009 USDC authorization on-chip, shows "Pay 0.50 USDC to Café, Arc Testnet, expires 14:05", and signs over NFC. This is I03, the truest reading of "tap your Ledger to pay", and the first third-party app to drive lib_nfc if it works. Whether BOLOS routes NFC APDUs to a third-party app at all is an open question with a four-hour Day-1 probe.
+What the first pass missed:
 
-Strongest reframe: I02 Tap to Receive, because it inverts who taps. Every poisoned-invoice demo in the corpus (five or more) defends on the payer's screen; nobody has had the receiver's hardware vouch for the address before the payer signs, and zero of ~70 prior projects touch Ledger NFC. Its feasibility review found the settlement path as written contradicts itself (Circle's keyless /settle needs a seller proof signed by the payTo key after the payer's signature exists, so the Flex would have to sign twice) and that the Web BLE fallback is riskier than the primary; the fix is a Circle developer account with Bearer auth, Flex-over-USB FIDO as the fallback, and a stable tunnel hostname as the RP ID from hour one. Only attempt it if someone on the team owns an iPhone or a current Android 14+ phone. If a club member owns an NFC Android and writes Kotlin, I03 is the bigger swing, with I02 as the committed fallback.
+- The SDK has an app-level NFC reader API: `io_nfc_reader_start`, `io_nfc_reader_send`, `io_nfc_reader_stop`, with card-detected and card-removed events and a response callback per command. Ledger added it on purpose (PR #777, December 2024) and fixed it twice (#987, #1044), including for apps that talk to a host over USB at the same time. A Ledger engineer wrote in open PR #1243 that no production app uses it, and code search finds none. A working third-party reader app would be the first we can find.
+- The build trap: the reader callbacks only exist in the app-side IO stack, which the default build compiles out. The recipe is `ENABLE_NFC=1`, `ENABLE_NFC_READER=1` and `DISABLE_OS_IO_STACK_USE=1`, the same own-stack setting as `app-security-key`, the only shipping NFC app. Without the third flag the app builds and never sees a card.
+- One Flex in reader mode can talk to any ISO 14443-A/B card that speaks APDUs: an Android phone running HCE, an NFC Forum Type 4 tag, a JavaCard, a contactless bank card, a YubiKey, the Ledger Recovery Key, or another NFC Ledger in card mode. That plain ISO-DEP goes over the air is inferred, because the MCU firmware is closed; NTAG213/215 stickers (Type 2) are probably unreadable.
+- Card emulation by a third party is not new: `structured-passkeys` shipped CTAP over NFC on a forked Rust SDK on 2026-10-04. The "first third-party lib_nfc app" claim in I03 is gone; the reader is where the first is.
+- Stock Speculos exits on the first reader call. An own-stack build, a five-line `seproxyhal.py` patch bind-mounted into the image and `--transport NFC` should let us develop in Docker (inferred, not run), so hardware is needed only for the gate and the demo.
+
+What survives, in order of ambition:
+
+- N1, the Flex reads a payee-signed payment request from an Android HCE app or a Type 4 tag, verifies the payee signature on the chip, shows "Pay 5.00 USDC to 0xA1ce…" and signs EIP-3009. Our Flex plus one NFC Android phone. Gated by one Sunday-morning probe (a bank card answering SELECT PPSE through a sideloaded reader app).
+- N2, the Flex is a Type 4 NDEF tag: a Chrome Android page writes the request into it with Web NFC, the payer approves on the Secure Screen, and the page reads back the signed authorization. Card emulation only, testable in Speculos, the committed NFC fallback if N1's gate fails.
+- N3, true Ledger-to-Ledger: the same app on both devices, payee in card mode, payer in reader mode. The code is N1 plus N2; the demo needs a borrowed second NFC Ledger. A stretch goal.
+- The stock Security Key path stays as before. I02 and I08 need no firmware, and I02 (the payee's Flex attests the receive address over NFC to a phone, the payer signs USDC on the Nano S Plus) is the fallback if every custom NFC probe fails. Its feasibility fix still applies: Circle's keyless /settle needs a seller proof signed by the payTo key, so use a Circle developer account with Bearer auth, Flex-over-USB FIDO as the fallback, and a stable tunnel hostname as the RP ID from hour one. It needs an iPhone or an Android 14+ phone. Zero of about 70 prior hackathon projects touch Ledger NFC.
+
+Strongest reframe: N1. It is the original idea with the payment-request half done properly (the receiver's key vouches for the address before the payer signs, which was I02's twist), it needs only hardware we own plus a phone, and it is the first use of an SDK feature Ledger built and nobody has shipped. Deep dive at the end of §4.
 
 ## 3. Ranked table
 
@@ -67,6 +79,12 @@ Rank is the synthesis order (score, verdicts, and fit with this team and calenda
 | 15 | I04 | Allowance Cheques: EIP-3009 validity windows as policy | 67.1 | refuted (cancel is per-nonce; Circle /verify untested; scope) | passes (0.72) | Elegant reframe, raw EIP-712 screens, policy stops once a cheque is cashed. One primitive, one day, if at all. |
 | 16 | I07 | Leash: silent inside the cap, Ledger outside it | 67.6 | refuted (zero hardware contact, Circle Agent Wallet unverified, SE stretch) | refuted (xPayables is this project) | Only the "purse is the chip" SE version is unseen, and it is the hardest build here. |
 | 17 | I16 | Injection Range: eval harness with a Ledger exit | 67.0 | refuted (six subsystems, LLM-judge metric, Venice cost) | refuted (AgentDojo, Mind the GAP) | Reusable idea inside it: per-device Secure Screen readability of hijacked calls as a DX finding. |
+| n/a | N1 | Tap the Request: the Flex reads a payee-signed payment request in NFC reader mode | unscored | gate: sideloaded own-stack reader app gets `CARD_DETECTED` and an FCI ending 9000 from SELECT PPSE on a bank card | not panel-reviewed | First third-party use of the SDK reader API we can find. Flex + NFC Android (HCE stub) or a Type 4 tag. C app, `DISABLE_OS_IO_STACK_USE=1`. Deep dive in §4. |
+| n/a | N2 | Flex as a Type 4 NDEF tag: phone writes the request, Flex signs, phone reads the receipt | unscored | gate: a phone (NFC Tools or Web NFC) reads a hard-coded NDEF record from the own-stack CE app | not panel-reviewed | CE only, Speculos-testable, no phone app. The committed NFC fallback if N1's gate fails by Sunday noon. |
+| n/a | N3 | TapPay Ledger-to-Ledger: payee in card mode, payer in reader mode | unscored | gate: N1's gate plus a second NFC Ledger in hand by Monday morning | not panel-reviewed | The original starter idea, now buildable as N1 + N2 in one app. Demo needs a borrowed Flex, Stax or Nano Gen5. |
+| n/a | N4 | Tapped co-signer: a YubiKey 5 NFC assertion verified on the Flex before an agent action | unscored | gate: N1's gate, then SELECT `A0000006472F0001` on the YubiKey returns 9000 and a U2F/FIDO version string | not panel-reviewed | Bolts onto I17 or I11 as a second hardware factor checked inside the secure element. Only if someone owns a YubiKey. |
+
+The N rows were added on 2026-10-10 after the NFC correction in §2 and were not scored or reviewed by the same panel as I01 to I17, so they carry no weighted score and no rank. Their feasibility column is the hardware gate that decides them.
 
 ## 4. Deep dives
 
@@ -210,6 +228,81 @@ Risks and mitigations: no Ledger has ever enumerated on this host and two node-h
 Jury fit: Rogers gets "agents propose, humans approve, hardware enforces" staged with two humans and an audit trail whose refusals are attributable; Mathias gets one glance and one press for an officer who has never held a wallet, and a product every club, DAO and nonprofit with two bank signatories already needs; Mo gets a small daemon, a SKILL.md and blunt Windows DX notes; Breeding gets a USDC treasury line if PAY lands, one sentence otherwise.
 
 Closest prior project and the difference: Ledger's own Enterprise Multisig CLI (`lem tx propose` / `sign` / `execute` with quorum against a Safe whose owners are Ledger devices) is "AI proposes, N humans on N Ledgers countersign", shipped by the company on the jury, so it goes on slide 1. What lem and Safe cannot do: the officers read the resolution words, not a safeTxHash; the object is a governance record, with PAY as one resolution kind; a Reject is a chained, attributable entry; and `verify --roster` proves offline that the adopted set is complete. QuickLedgerBooks, fianso and stoke are single-signer treasury agents; CoSig taps blind. Do not call the project Countersign: `countersign-6svcb` at ETHOnline 2026 is an unrelated Hedera guard-service project, checked.
+
+### N1 Tap the Request (top NFC idea, unscored)
+
+Added 2026-10-10 after the NFC correction in §2. The panel has not scored or reviewed it, so it does not displace I17 in §1. It is a different project, and a team submits only one. Choose it over I17 only if someone on the team owns an NFC Android phone and the reader gate below passes by Sunday noon. Every SDK claim here is sourced in `research/nfc-reader-mode.md`.
+
+Primitives: a C fork of `LedgerHQ/app-boilerplate`, built on the `API_LEVEL_<N>` SDK branch that matches the Flex OS (the reader API needs `flex_1.4.1` or later) with `ENABLE_NFC=1`, `ENABLE_NFC_READER=1` and `DISABLE_OS_IO_STACK_USE=1`. The reader calls are `io_nfc_reader_start`, `io_nfc_reader_send` and `io_nfc_reader_stop`. On-chip crypto uses the same calls app-ethereum uses for EIP-712:
+- `cx_ecdsa_verify_no_throw` checks the payee signature.
+- `cx_keccak` does the address check and the EIP-712 hash.
+- `bip32_derive_ecdsa_sign_rs_hash_256` on `44'/60'/0'/0/0` makes the payer signature.
+
+The counterparty, in order of preference:
+1. A small Kotlin `HostApduService` on an Android phone, with our own AID.
+2. A stock Play Store NDEF-emulator app, if it turns out to be a real Type 4 tag.
+3. An NTAG 424 DNA tag, if one can arrive by Monday.
+
+Settlement is a 20-line viem script that calls USDC `transferWithAuthorization` from a gas-funded hot key. EIP-3009 lets anyone submit the call.
+
+Boundary in one sentence: the phone or tag only carries bytes, and the Flex itself checks that the key receiving the money signed the request, shows amount, token, chain and recipient on the Secure Screen, and signs an authorization that settles once, for that request only; the Nano S Plus cannot tap, so it is the payee's cold key that signed the request.
+
+How it works:
+- The request is about 150 bytes, `{ver, chainId, token, value, payTo, validBefore, reqNonce, label}`, followed by a 65-byte secp256k1 signature and the 65-byte public key. That stays under the reader's 271-byte reply limit.
+- The Flex app starts in reader mode with a "Hold the payee's phone to the back" screen.
+- On `CARD_DETECTED` it sends `SELECT <our AID>` and `GET_REQUEST`. It copies the reply out of the callback at once, because the reply sits in a shared buffer.
+- It checks the signature and that `keccak(pubkey)[12:] == payTo`, then draws an NBGL review: "Pay 5.00 USDC / to 0xA1ce…9f (Cafe Lumen) / Base Sepolia / request signed by this address / valid until 14:05, checked on-chain".
+- The payer moves the phone away and approves.
+- The app hashes EIP-3009 `TransferWithAuthorization` with `nonce = keccak(request)` and signs it. On the next tap it sends `PUT_AUTH` with `{from, to, value, validBefore, nonce, v, r, s}`, about 180 bytes in one short APDU.
+- The phone passes the authorization to the settlement script and shows the explorer link.
+
+Because the nonce comes from the request, a replayed request settles at most once on-chain. If no phone is available, the authorization goes to the laptop over USB instead; the SDK supports USB alongside the reader (PR #987).
+
+Three-day plan:
+
+- Oct 10 (tonight), in Docker:
+  1. Build the probe from `research/nfc-reader-mode.md` §2 on the v27 builder image.
+  2. Apply the `seproxyhal.py` patch, bind-mount it, and run the own-stack build with `--transport NFC`.
+  3. Write the relay script that injects `CARD_DETECTED` and answers SELECT PPSE with a canned FCI.
+
+  If that loop works, all later app work can happen on Speculos.
+- Oct 11 (Sun, no mentors):
+  - 09:00 hardware gate: read the Flex OS version and rebuild on the matching branch if it is not 27, check that NFC is on, sideload with `ledgerblue.runScript --scp`, and tap a bank card. GO if an FCI ending 9000 comes back.
+  - After the gate, build the app side: the request format, the verify and review screens, and EIP-3009 signing.
+  - Then the Kotlin HCE stub: two INS codes and a hard-coded request signed by the Nano S Plus over USB.
+  - Noon decision: if the gate failed, switch to N2 (Flex as a Type 4 tag, card emulation only) and keep the same request and authorization format.
+- Oct 12 (Mon, first mentor day):
+  - End-to-end tap with the phone.
+  - The settlement script on Base Sepolia, or Arc testnet (see `research/gap-usdc-x402-eip3009-on-ledger.md`).
+  - A Speculos backup clip.
+  - Ask the mentors whether the retail OS supports reader mode for sideloaded apps, and when PR #1243 will land.
+  - Record the video in the evening.
+- Oct 13 (Tue, deadline day):
+  - README with the boundary sentence and the limits listed under risks below.
+  - DX-FEEDBACK with five findings: the own-stack trap, the stale `lib_nfc` doc, the missing `io_nfc_is_reader` prototype, the probably stale UID in `CARD_DETECTED`, and the Speculos exit on tag 0x5D.
+  - Slides and the form; submit by 20:00 CEST.
+
+Demo moment: the payee's phone shows "Request 5 USDC". The presenter holds the Flex to it and the E Ink shows "Pay 5.00 USDC to 0xA1ce…9f, request signed by this address". The presenter moves the phone away, holds to sign and taps again, and the phone shows the Base Sepolia transaction. Then the catch: a teammate's phone serves the same request with one byte of the amount changed, and the Flex shows "Request signature invalid" with nothing to sign. Close on the two-device beat: the Nano S Plus signed the request at the till, the Flex signed the payment, and the phone carried bytes it could not change.
+
+Risks and mitigations:
+- The OS may refuse reader mode to a sideloaded app. Only the Sunday gate answers that, so N2 is ready as the fallback on the same data format.
+- The on-air framing lives in closed MCU firmware. The bank-card probe settles it.
+- The UID in `CARD_DETECTED` may be stale, so the app never uses it.
+- Replies over 271 bytes are dropped without an error. The request stays small and every send has a timeout.
+- NFC can be switched off in Settings while the start call still returns true. The app checks `OS_SETTING_FEATURES_NFC_ENABLED` and tells the user.
+- The payee signature only proves that whoever controls `payTo` signed the request. It does not prove `payTo` is the café, so the label is unverified and the pitch says the human still checks the address. The upgrade is a small on-device list of known payees.
+- The device has no clock, so `validBefore` is shown on screen and enforced only on-chain.
+- An offline payer can sign for more than their balance, so the payee carries that risk until settlement.
+- PR #1243 renames the API, so pin the SDK branch.
+- Wording: say "the first third-party reader app we could find", never "first".
+
+Jury fit:
+- Rogers: the Op3n line "what you verify, and where you verify it", taken literally. Verification happens on the chip, not the phone.
+- Mathias: a tap-to-pay gesture people already know, on a Ledger, with no app on the payer's side.
+- Mo: a DX report on an SDK feature nobody has used, with five concrete findings.
+- Breeding: USDC EIP-3009 signed on a hardware wallet from a tap.
+
+Closest prior project and the difference: Ledger's own Recovery Key is the Flex reading a card, but only Ledger's own card, inside BOLOS, and it signs nothing. COLDCARD, Tangem, Keycard and Arx HaLo put the hardware on the passive side and let the phone read it. Cypherock X1 and OneKey Pro read only their vendor's cards. `structured-passkeys` (2026-10-04) is a third-party Ledger NFC app, but in card mode. Not found in the researched corpus: a hardware wallet with a screen that reads a third-party NFC object, verifies it on the chip and signs what it read.
 
 ## 5. Combinations that stack
 
