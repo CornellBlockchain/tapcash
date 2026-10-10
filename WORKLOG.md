@@ -68,3 +68,9 @@ Workflow `ledger-spikes`, 5 agents, all in `spikes/<name>/README.md`:
 - Remaining honest limits (in proto/README): `node script` / `npm test` are tier0 and run whatever the repo contains; only Bash/PowerShell/Edit/Write hooked; no log lock; ledgerd unauthenticated locally; tier2 co-sign TODO; real HID untested.
 - Collateral to flag: while killing a hung test the fix agent's PowerShell filter matched `@modelcontextprotocol/server-pdf` and killed ~14 node processes belonging to other Claude sessions' pdf MCP server.
 - Added `README.md` index. Untracked `proto/log/session.jsonl`.
+
+## 2026-10-10 05:00 — reconciled ranking after second opinion
+
+- Designed + judged I15 Minute Book (73.9, feasibility passes, originality refuted on Ledger's own multisig CLI but survives on minutes-as-object and two-officer roles) and I17 Release Seal (76.95, both reviewers pass). IDEAS.md §1/§3/§4/§7 updated.
+- Reconciled top 3: **I17 Release Seal** (= narrowed I11: ledgerd holds the publish credential, fires only on a Secure Screen signature over repo/version/destination/digest; ~130 lines on the reviewed proto core) · **I15 Minute Book** (two officers, two devices, countersigned minutes) · **I14 Consent Receipts** (patient story, lowest Day-1 risk, upgrade path = decrypt key moves into ledgerd).
+- Elapsed autonomous time ≈ 4.5 h. Nothing has touched a real device. Day-1 gate list: IDEAS.md §6.
