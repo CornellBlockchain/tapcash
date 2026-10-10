@@ -45,3 +45,9 @@ Workflow `ledger-spikes`, 5 agents, all in `spikes/<name>/README.md`:
 - Workflow `ledger-ideation-panel`: 10 lens generators (voice-strongest, nfc-strongest, non-finance, key-ring-headless, fido-pgp, custom-device-app, circle-venice, agent-intent-policies, human-agency-delegation, wildcard) → merger (16 candidates I01–I16) → per candidate: rubric scorer + feasibility refuter + originality refuter (48 judges) → synthesizer. 60 agents; hit a usage-limit pause mid-run, resumed from cache.
 - Result ranking (synthesis order, not raw score): 1 I11 ledger-sudo (75.7) · 2 I14 Consent Receipts (71.9) · 3 I06 SE-counter Receipt (74.2, gated on sideload) · 4 I10 ringctl (75.0) · 5 I01 Echo = honest voice idea (67.7). Starter idea 2 survives only as I02 Tap-to-Receive (Flex Security Key NFC tap on a phone) or I03 custom NFC C app (78.65 on paper, refuted on feasibility).
 - Recommended stack: I11 core on the stock Ethereum app (EIP-191) with I06 as the Sunday-noon sideload upgrade; I14 as the alternative if the pitch should be about a patient instead of a developer.
+
+## 2026-10-10 03:40 — second opinion + build image
+
+- Codex (read-only) reviewed IDEAS.md against research/ and spikes/. Accepted: calendar was wrong (Oct 10 is Saturday; Oct 12–13 are mentor days); hook timeouts do not block by default so the hook cannot be the enforcement point; I06 over-ranked; I15 under-ranked; new candidate I17 Release Seal. Design consequence: the daemon must hold the privileged credential and act only on a valid device signature (nonce + expiry + artifact digest). Recorded as IDEAS.md §7; dates relabelled.
+- Pulled `ghcr.io/ledgerhq/ledger-app-builder/ledger-app-dev-tools:latest`; building unmodified `app-boilerplate-rust` for flex + nanosplus and running it in Speculos (agent in progress).
+- Prototype of the shared approval core (`proto/`: ledgerd + Claude Code hook + verifier on Speculos) in progress; its review phase will be re-run against the §7 punctures.
