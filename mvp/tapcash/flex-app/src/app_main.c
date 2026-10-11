@@ -90,13 +90,32 @@ static void settings_changed(int token, uint8_t index, int page);
 
 enum { PER_TAP_TOKEN = FIRST_USER_TOKEN, TOTAL_TOKEN, COUNT_TOKEN };
 
+// Home and settings screens. All filled at runtime (apps can't have initialized .data). The SDK
+// keeps pointers to these, so updating them in place shows the change when the user goes back
+// home or reopens Settings; redrawing a settings page by number lands on the wrong page.
+static nbgl_homeAction_t home_action;
+static char per_tap_text[NB_CAPS][24], total_text[NB_CAPS][24], count_text[NB_CAPS][24];
+static const char *per_tap_names[NB_CAPS], *total_names[NB_CAPS], *count_names[NB_CAPS];
+static nbgl_content_t settings_contents[3];
+static nbgl_genericContents_t settings;
+
+static void ui_update(void) {
+    settings_contents[0].content.choicesList.initChoice = per_tap_idx;
+    settings_contents[1].content.choicesList.initChoice = total_idx;
+    settings_contents[2].content.choicesList.initChoice = count_idx;
+    if (pocket_left) {
+        char left[24];
+        format_usdc(left, sizeof(left), pocket_left);
+        snprintf(home_text, sizeof(home_text), "Pocket mode: %s USDC left\nfor %u more payment%s",
+                 left, (unsigned) pocket_taps_left, pocket_taps_left == 1 ? "" : "s");
+        home_action.text = "Turn off pocket mode";
+    } else {
+        snprintf(home_text, sizeof(home_text), "Hold your iPhone\nnear the screen");
+        home_action.text = "Turn on pocket mode";
+    }
+}
+
 static void ui_home(void) {
-    // All filled at runtime: apps can't have initialized .data
-    static nbgl_homeAction_t action;
-    static char per_tap_text[NB_CAPS][24], total_text[NB_CAPS][24], count_text[NB_CAPS][24];
-    static const char *per_tap_names[NB_CAPS], *total_names[NB_CAPS], *count_names[NB_CAPS];
-    static nbgl_content_t contents[3];
-    static nbgl_genericContents_t settings;
     for (int i = 0; i < NB_CAPS; i++) {
         snprintf(per_tap_text[i], sizeof(per_tap_text[i]), "%u USDC per tap", (unsigned) PER_TAP_CAPS[i]);
         snprintf(total_text[i], sizeof(total_text[i]), "%u USDC in total", (unsigned) TOTAL_CAPS[i]);
@@ -106,45 +125,32 @@ static void ui_home(void) {
         total_names[i] = total_text[i];
         count_names[i] = count_text[i];
     }
-    memset(contents, 0, sizeof(contents));
-    contents[0].type = CHOICES_LIST;
-    contents[0].content.choicesList.names = per_tap_names;
-    contents[0].content.choicesList.nbChoices = NB_CAPS;
-    contents[0].content.choicesList.initChoice = per_tap_idx;
-    contents[0].content.choicesList.token = PER_TAP_TOKEN;
-    contents[0].content.choicesList.tuneId = NBGL_NO_TUNE;
-    contents[0].contentActionCallback = settings_changed;
-    contents[1] = contents[0];
-    contents[1].content.choicesList.names = total_names;
-    contents[1].content.choicesList.initChoice = total_idx;
-    contents[1].content.choicesList.token = TOTAL_TOKEN;
-    contents[2] = contents[0];
-    contents[2].content.choicesList.names = count_names;
-    contents[2].content.choicesList.initChoice = count_idx;
-    contents[2].content.choicesList.token = COUNT_TOKEN;
+    memset(settings_contents, 0, sizeof(settings_contents));
+    settings_contents[0].type = CHOICES_LIST;
+    settings_contents[0].content.choicesList.names = per_tap_names;
+    settings_contents[0].content.choicesList.nbChoices = NB_CAPS;
+    settings_contents[0].content.choicesList.token = PER_TAP_TOKEN;
+    settings_contents[0].content.choicesList.tuneId = NBGL_NO_TUNE;
+    settings_contents[0].contentActionCallback = settings_changed;
+    settings_contents[1] = settings_contents[0];
+    settings_contents[1].content.choicesList.names = total_names;
+    settings_contents[1].content.choicesList.token = TOTAL_TOKEN;
+    settings_contents[2] = settings_contents[0];
+    settings_contents[2].content.choicesList.names = count_names;
+    settings_contents[2].content.choicesList.token = COUNT_TOKEN;
     settings.callbackCallNeeded = false;
-    settings.contentsList = contents;
+    settings.contentsList = settings_contents;
     settings.nbContents = 3;
-
-    action.callback = pocket_toggle;
-    action.style = SOFT_HOME_ACTION;
-    if (pocket_left) {
-        char left[24];
-        format_usdc(left, sizeof(left), pocket_left);
-        snprintf(home_text, sizeof(home_text), "Pocket mode: %s USDC left\nfor %u more payment%s",
-                 left, (unsigned) pocket_taps_left, pocket_taps_left == 1 ? "" : "s");
-        action.text = "Turn off pocket mode";
-    } else {
-        snprintf(home_text, sizeof(home_text), "Hold your iPhone\nnear the screen");
-        action.text = "Turn on pocket mode";
-    }
+    home_action.callback = pocket_toggle;
+    home_action.style = SOFT_HOME_ACTION;
+    ui_update();
     nbgl_useCaseHomeAndSettings(APPNAME,
                                 &C_tapcash_64px,
                                 home_text,
                                 INIT_HOME_PAGE,
                                 &settings,
                                 NULL,
-                                &action,
+                                &home_action,
                                 app_quit);
 }
 
@@ -167,6 +173,7 @@ static void settings_changed(int token, uint8_t index, int page) {
             pocket_taps_left = COUNT_CAPS[count_idx];
         }
     }
+    ui_update();
 }
 
 static void pocket_choice(bool confirm) {
