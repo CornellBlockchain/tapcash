@@ -1,2 +1,0 @@
-{"ok":false,"error":{"command":"account discover","code":"unknown","message":"No Ledger device found. Unlock the device and try again."}}
-exit=1 seconds=61

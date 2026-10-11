@@ -1,3 +1,0 @@
-Connect and unlock your Ledger on the dashboard…
-[✖] No Ledger device found. Unlock the device and try again.
-exit=1 seconds=62
