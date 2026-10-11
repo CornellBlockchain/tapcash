@@ -1,7 +1,8 @@
 """Hands-on ledger-cash demo: leaves two emulated Ledger Flex devices and a local chain running so a person can
 drive them from a browser.
 
-  python live_demo.py up                 start chain + payer Flex + payee Flex, load 20 USDC on the payer
+  python live_demo.py up [--base]        start chain + payer Flex + payee Flex, load 20 USDC on the payer
+                                         --base: settle on Base Sepolia (real testnet USDC, testnet-wallets.json, BaseScan links)
   python live_demo.py request 5 coffee   payee asks for 5 USDC (approve it on the payee screen yourself, or add --auto)
   python live_demo.py tap                bring the two devices together for 60 s (approve on the payer screen yourself, or --auto)
   python live_demo.py status             payer cash, payee IOUs, on-chain balances
@@ -17,22 +18,49 @@ import sys
 import threading
 import time
 
+import os
+
 import demo as D
 
 T = D.T
 STATE = D.HERE / "live_demo.json"
+WALLETS = D.HERE / "testnet-wallets.json"  # gitignored: fresh Base Sepolia seeds + relayer key
+BASE = {"chain": 84532, "token": "0x036CbD53842c5426634e7929541eC2318f3dCF7e", "rpc": "https://sepolia.base.org",
+        "scan": "https://sepolia.basescan.org"}
+
+
+def use_base():
+    """Point everything at Base Sepolia: the payer/payee seeds and relayer key from testnet-wallets.json."""
+    w = json.loads(WALLETS.read_text())
+    T.SEED_PAYER, T.SEED_PAYEE = w["payer"]["seed"], w["payee"]["seed"]
+    T.ADDR_PAYER, T.ADDR_PAYEE, T.CHAIN = w["payer"]["cash_account"], w["payee"]["cash_account"], BASE["chain"]
+    os.environ.update(RPC_URL=BASE["rpc"], TOKEN=BASE["token"], RELAYER_KEY=w["relayer"]["key"])
+    D.RPC = BASE["rpc"]
+
+
+def scan_links(text):
+    if os.environ.get("RPC_URL") != BASE["rpc"]:
+        return text
+    import re
+    return re.sub(r"tx (0x[0-9a-fA-F]{64})", lambda m: f"tx {BASE['scan']}/tx/{m.group(1)}", text)
 
 
 def devices():
     return D.device("payer", D.B, T.ADDR_PAYER), D.device("payee", D.B + 10, T.ADDR_PAYEE, prefix=b"USB!")
 
 
-def up():
-    print("starting local chain (anvil) and deploying test USDC ...")
-    D.anvil_up()
-    D.node("deploy.mjs")
-    token = json.loads((D.SETTLE / "deploy.json").read_text())["token"]
-    D.node("fund.mjs", T.ADDR_PAYER, "100")
+def up(base=False):
+    if base:
+        use_base()
+        token = BASE["token"]
+        print(f"Base Sepolia mode: payer cash account {T.ADDR_PAYER}, payee {T.ADDR_PAYEE}")
+        D.node("balances.mjs", T.ADDR_PAYER, T.ADDR_PAYEE)
+    else:
+        print("starting local chain (anvil) and deploying test USDC ...")
+        D.anvil_up()
+        D.node("deploy.mjs")
+        token = json.loads((D.SETTLE / "deploy.json").read_text())["token"]
+        D.node("fund.mjs", T.ADDR_PAYER, "100")
     print("starting the two emulated Ledger Flex devices ...")
     D.speculos_up(T.SEED_PAYER, T.SEED_PAYEE)
     payer, payee = devices()
@@ -42,7 +70,7 @@ def up():
     assert payer.ui(D.INS["SET_CONFIG"], cfg, "live")[1] == 0x9000
     assert payee.ui(D.INS["SET_CONFIG"], cfg, "live")[1] == 0x9000
     assert payer.ui(D.INS["LOAD_CASH"], T.u64(20 * D.USDC), "live")[1] == 0x9000
-    STATE.write_text(json.dumps({"token": token}))
+    STATE.write_text(json.dumps({"token": token, "base": base}))
     print("READY. Payer screen http://127.0.0.1:16000 (20 USDC loaded) | Payee screen http://127.0.0.1:16010")
 
 
@@ -105,7 +133,7 @@ def settle():
         return
     f = D.HERE / "live-auths.json"
     f.write_text(json.dumps(a, indent=1))
-    print(D.node("settle.mjs", str(f), check=False)[1])
+    print(scan_links(D.node("settle.mjs", str(f), check=False)[1]))
 
 
 def down():
@@ -200,9 +228,12 @@ def serve(port=16099):
 
 if __name__ == "__main__":
     a = sys.argv[1:] or ["status"]
-    auto = "--auto" in a
-    a = [x for x in a if x != "--auto"]
-    if a[0] in ("request", "tap", "status", "settle") and STATE.exists():
-        T.TOKEN = bytes.fromhex(json.loads(STATE.read_text())["token"][2:])
-    {"up": up, "status": status, "settle": settle, "down": down, "serve": serve,
+    auto, base = "--auto" in a, "--base" in a
+    a = [x for x in a if x not in ("--auto", "--base")]
+    if a[0] != "up" and STATE.exists():
+        st = json.loads(STATE.read_text())
+        T.TOKEN = bytes.fromhex(st["token"][2:])
+        if st.get("base"):
+            use_base()
+    {"up": lambda: up(base), "status": status, "settle": settle, "down": down, "serve": serve,
      "tap": lambda: tap(auto), "request": lambda: request(a[1], " ".join(a[2:]) or "coffee", auto)}[a[0]]()
