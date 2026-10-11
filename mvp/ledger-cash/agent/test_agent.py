@@ -45,7 +45,8 @@ flood = NS(tool_calls=[NS(function=NS(name="ring_up", arguments=json.dumps({"lin
 stub10 = NS(chat=NS(completions=NS(create=lambda **kw: NS(choices=[NS(message=flood)]))))
 assert A.parse_llm("ten lines of 50 sandwiches", stub10, "m") == {"sandwich": 50}  # the cap is on the sum
 assert seen["tool_choice"]["function"]["name"] == "ring_up" and seen["tools"][0]["function"]["name"] == "ring_up"
-assert A.llm() is None  # no key in this process -> offline parser
+assert A.llm() is None  # no TILL_PROVIDER -> no key is ever used
+os.environ["OPENROUTER_API_KEY"] = "x"; assert A.llm() is None; del os.environ["OPENROUTER_API_KEY"]  # a key alone is not consent
 
 
 # 3. watch(): GET_AUTHS from a fake payee holding a 5 USDC IOU recorded by demo.py (chain 31337, first anvil token)

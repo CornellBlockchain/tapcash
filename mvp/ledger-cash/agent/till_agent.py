@@ -1,12 +1,13 @@
 """Till agent: the AI cashier for a merchant whose Ledger is the ledger-cash payee.
 
-python agent/till_agent.py order "two flat whites and a croissant, one oat milk"   [--offline] [--mic | --audio f.wav]
+python agent/till_agent.py order "two flat whites and a croissant, one oat milk"   [--llm] [--mic | --audio f.wav]
 python agent/till_agent.py books                 GET_AUTHS -> verify each signed IOU off-device -> agent/books.csv
 python agent/till_agent.py settle [--rpc URL]    online: risk check (balance, authorizationState), then settle
 Options: --net anvil|base (EIP-712 domain + chain to expect), --books FILE.
 Device: real USB via hw.py / ledgerblue (Speculos too, with LEDGER_PROXY_ADDRESS / LEDGER_PROXY_PORT).
-LLM: OpenAI-compatible; first key found of VENICE_API_KEY, OPENROUTER_API_KEY, OPENAI_API_KEY (TILL_PROVIDER picks one;
-TILL_MODEL, TILL_BASE_URL override). No key, --offline, or an LLM error -> the deterministic keyword parser.
+LLM: OFF by default (deterministic keyword parser). A live call needs BOTH --llm and TILL_PROVIDER=venice|openrouter|openai
+naming whose API key to spend; the agent never picks a key from the environment on its own. TILL_MODEL,
+TILL_BASE_URL override. A missing key or an LLM error -> the keyword parser.
 """
 import argparse
 import csv
@@ -92,10 +93,11 @@ PROVIDERS = [("venice", "VENICE_API_KEY", "https://api.venice.ai/api/v1", "kimi-
 
 
 def llm():
-    """(client, model, provider) for the first provider with a key, or None."""
+    """(client, model, provider) for the provider the operator named in TILL_PROVIDER, or None.
+    ponytail: no auto-pick. Spending someone's API key needs an explicit choice."""
     want = os.environ.get("TILL_PROVIDER")
     for name, env, url, model in PROVIDERS:
-        if os.environ.get(env) and want in (None, name):
+        if want == name and os.environ.get(env):
             from openai import OpenAI
             return (OpenAI(api_key=os.environ[env], base_url=os.environ.get("TILL_BASE_URL", url), max_retries=0,
                            timeout=float(os.environ.get("TILL_LLM_TIMEOUT", 8))),  # bad Wi-Fi -> offline parser fast
@@ -123,7 +125,7 @@ def parse_llm(text, client, model):
     return order
 
 
-def parse_order(text, offline=False):
+def parse_order(text, offline=True):
     c = None if offline else llm()
     if c:
         try:
@@ -347,7 +349,8 @@ def main(argv):
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("cmd", choices=["order", "books", "settle"])
     ap.add_argument("text", nargs="*")
-    ap.add_argument("--offline", action="store_true", help="keyword parser only, no LLM call")
+    ap.add_argument("--llm", action="store_true", help="parse with the LLM named by TILL_PROVIDER (spends that API key)")
+    ap.add_argument("--offline", action="store_true", help="(default) keyword parser only; kept for old scripts")
     ap.add_argument("--mic", action="store_true", help="speak the order (faster-whisper small.en)")
     ap.add_argument("--audio", help="transcribe this audio file instead of the mic")
     ap.add_argument("--net", choices=list(hw.NETS), default="anvil")
@@ -365,7 +368,7 @@ def main(argv):
         if not text:
             print("no order given")
             return 1
-        return 0 if till.request(parse_order(text, a.offline)) else 1
+        return 0 if till.request(parse_order(text, offline=not a.llm or a.offline)) else 1
     if a.cmd == "books":
         till.watch()
     else:

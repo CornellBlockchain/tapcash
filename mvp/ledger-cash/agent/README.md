@@ -29,7 +29,7 @@ cd mvp/ledger-cash
 python agent/test_agent.py        # offline checks, no network/Docker/device: parser, pricing, label, LLM stub,
                                   # IOU verification, Key Ring stub + env fallback -> ALL PASS
 python -u agent/agent_demo.py     # end to end in emulation (Docker, ~70 s), offline parser, no LLM call -> ALL PASS
-AGENT_DEMO_LLM=1 python -u agent/agent_demo.py   # same, order 1 through the LLM (ONE live call) -> agent_demo-llm-run.log
+AGENT_DEMO_LLM=1 TILL_PROVIDER=openrouter python -u agent/agent_demo.py   # same, order 1 through the LLM (ONE live call) -> agent_demo-llm-run.log
 python agent/live_smoke.py        # ONE live LLM call (tool calling); prints SKIP without a key
 ```
 
@@ -48,7 +48,7 @@ python agent/till_agent.py settle --net base --rpc https://sepolia.base.org   # 
 
 ## LLM providers (OpenAI-compatible, `openai` SDK)
 
-The agent uses the first provider whose key is set. `TILL_PROVIDER` forces one, `TILL_MODEL` overrides the model and
+The LLM is off by default. A live call needs `--llm` **and** `TILL_PROVIDER` naming whose key to spend; the agent never picks a key from the environment by itself. `TILL_PROVIDER` selects the provider, `TILL_MODEL` overrides the model and
 `TILL_BASE_URL` the endpoint. With no key, with `--offline`, or when the call fails, it uses the deterministic
 keyword parser and says so. The call has an 8 s timeout and no retries (`TILL_LLM_TIMEOUT`). The demo relies on
 that parser so it never depends on the network.

@@ -1,7 +1,7 @@
 """Till agent end to end in emulation, offline parser by default (no LLM call, no network beyond localhost).
 
     python -u agent/agent_demo.py     (same needs as demo.py: app/build/flex/bin/app.elf, Docker, `npm i` in settle/)
-    AGENT_DEMO_LLM=1 python -u agent/agent_demo.py     order 1 goes through the LLM instead (ONE live call)
+    AGENT_DEMO_LLM=1 TILL_PROVIDER=openrouter python -u agent/agent_demo.py   order 1 through that LLM (ONE live call)
 
 One container at a time (host RAM), on demo.py's ports:
   1. ta-anvil:     deploy the USDC look-alike, fund the payer's cash account with only 10 USDC, dump the state

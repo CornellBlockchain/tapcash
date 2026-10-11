@@ -10,7 +10,7 @@ import till_agent as A  # noqa: E402
 
 c = A.llm()
 if not c:
-    print("SKIP: no VENICE_API_KEY / OPENROUTER_API_KEY / OPENAI_API_KEY")
+    print("SKIP: set TILL_PROVIDER=venice|openrouter|openai (and that provider's key) to spend ONE live call")
     sys.exit(0)
 text = " ".join(sys.argv[1:]) or "could I grab a couple of flat whites, one with oat, plus a croissant and a double espresso"
 print(f"provider {c[2]}, model {c[1]}\norder: {text!r}")
