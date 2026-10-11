@@ -1,0 +1,79 @@
+== 1. chain (online, before): deploy USDC, fund the payer
+  token 0x5FbDB2315678afecb367f032d93F642f64180aa3 chainId 31337 tx 0xfbfa126cb1e320eda35a0e8bf278195e886d79547544826678a8314ff0b113ec
+  minted 100 USDC to 0x153a5aA5E15f13C92760B65AAE8cCfa7C5161415 tx 0xfe6a598ec753fca5b085b5e1af22c6ff1e008cfa47cf837759e23c647452cc24 balance 100.000000 USDC
+  0x153a5aA5E15f13C92760B65AAE8cCfa7C5161415 100.000000 USDC
+  0x9858EfFD232B4033E47d90003D41EC34EcaEda94 0.000000 USDC
+== 2. devices (offline): payer Flex = NFC reader, payee Flex = NFC card emulation
+  [payer] Set USDC network | Chain ID 31337 | USDC  | 0x5FBDB2315678AFECB367F0 | 32D93F642F64180AA3 | Reject | Approve
+  [payee] Set USDC network | Chain ID 31337 | USDC  | 0x5FBDB2315678AFECB367F0 | 32D93F642F64180AA3 | Reject | Approve
+  [payer] Load 20 USDC as cash | Cash after: 20 USDC | Reject | Approve
+  [payee] Ledger Cash | Cash: 0 USDC | Quit app | Pay by tap | Request 5 USDC | For: coffee | Reject | Approve
+  payer loaded 20 USDC cash; payee asks 5 USDC for coffee
+  NFC side of the payee: SELECT and GET_REQUEST answer; GET_BALANCE, PAY, LOAD_CASH, ... -> 6D00
+== tap 1: pay 5 USDC by tap (started from the payer's home button "Pay by tap")
+  tap: card 04a1b2c3 in field
+    reader > card 00a404000cf04c45444745524341534801
+    reader < card 9000
+    reader > card e011000000
+    reader < card 0000000000007a695fbdb2315678afecb367f032d93f642f64180aa39858effd232b4033e47d90003d41ec34ecaeda9400000000004c4b40ffffffffffffffffc19fa87f636f66666565000000000000000000000000000000000000e3525657a56d1b57aedebb77907484c02f03abcfceb86baf42af421d8829c123561dbcdc00d54f1747863699c238033e3c780f45dd5f4145eab2d962335fd7541c9000
+  [payer screen] Reading request | Pay with | USDC cash | Swipe to review | Reject | 1 of 4
+  [payer screen] Pay | 5 USDC | To | 0x9858EFFD232B4033 | E47D90003D41EC34E | CAEDA94 | For | coffee | Reject | 2 of 4
+  [payer screen] Cash left after | 15 USDC | Reject | 3 of 4
+  [payer screen] Pay 5 USDC? | Reject | 4 of 4 | Hold to sign
+    reader > card e0230000a1153a5aa5e15f13c92760b65aae8ccfa7c51614159858effd232b4033e47d90003d41ec34ecaeda9400000000004c4b400000000000000000ffffffffffffffff626514547f87efdb350553ba82d630ba644f8a6b4c9665f45669475bb54a13841b3155c9dcc8d1f7ca8cbe00582414004f9c320a2849f992e008cdb0d3ee2483246df1ff49588ffb1b93b8fbe68fa6d6377d8860b9476e5720df64de32c50d6ea3
+    reader < card 01d93a13004427cc5ed67a26dfe05f5688107bf718e2fb51013de5803ed2d33eab1057b071a840c3c6d61dee395309933b4d69e4908148969bef658f6e7669ce101b9000
+  tap: card removed after 3 APDU(s)
+  TAP_STATUS PAID sw 9000   payer screen: Sending payment | Paid 5 USDC | to  | 0x9858EFFD232B4033 | E47D90003D41EC34E | CAEDA94
+  PAID: payer cash 20 -> 15, payee holds the auth (EIP-712 recovers to payer), receipt verified on the payer
+== tap 2: same tap again (the payee no longer serves the paid request)
+  tap: card 04a1b2c3 in field
+    reader > card 00a404000cf04c45444745524341534801
+    reader < card 9000
+    reader > card e011000000
+    reader < card b006
+  tap: card removed after 2 APDU(s)
+  TAP_STATUS FAILED sw B006   payer screen: Reading request | Payee has no request
+  NOTHING PAID: B006 payee has no request, cash still 15; the same request over USB PAY -> B004
+== tap 3: payee pulled away while the review is on screen
+  [payee] Request 3 USDC | For: tea | Reject | Approve
+  [payer] Ledger Cash | Cash: 15 USDC | Quit app | Pay by tap | Pay with | USDC cash | Swipe to review | Reject | 1 of 4
+  [payer] Reject transaction? | Go back to transaction | Yes, reject
+  tap: card 04a1b2c3 in field
+    reader > card 00a404000cf04c45444745524341534801
+    reader < card 9000
+    reader > card e011000000
+    reader < card 0000000000007a695fbdb2315678afecb367f032d93f642f64180aa39858effd232b4033e47d90003d41ec34ecaeda9400000000002dc6c0ffffffffffffffffbf51ab4074656100000000000000000000000000000000000000000006024480377046bbaff60d8c3a496f28a7da25778efa417c38a5d2122c8834666350ad17188423bca057781fe769a6d6d2e3caa6f71411ccde0b956bb74fbe331c9000
+  [payer screen] Reading request | Pay with | USDC cash | Swipe to review | Reject | 1 of 4
+  (payee pulled away while the review is on screen)
+  tap: card removed after 2 APDU(s)
+  TAP_STATUS FAILED sw B008   payer screen: Card removed | Nothing paid
+  NOTHING PAID: B008 card removed before approval, cash still 15
+== tap 4: payee pulled away after the payer signed (PUT_AUTH never arrives)
+  tap: card 04a1b2c3 in field
+    reader > card 00a404000cf04c45444745524341534801
+    reader < card 9000
+    reader > card e011000000
+    reader < card 0000000000007a695fbdb2315678afecb367f032d93f642f64180aa39858effd232b4033e47d90003d41ec34ecaeda9400000000002dc6c0ffffffffffffffffbf51ab4074656100000000000000000000000000000000000000000006024480377046bbaff60d8c3a496f28a7da25778efa417c38a5d2122c8834666350ad17188423bca057781fe769a6d6d2e3caa6f71411ccde0b956bb74fbe331c9000
+  [payer screen] Reading request | Pay with | USDC cash | Swipe to review | Reject | 1 of 4
+  [payer screen] Pay | 3 USDC | To | 0x9858EFFD232B4033 | E47D90003D41EC34E | CAEDA94 | For | tea | Reject | 2 of 4
+  [payer screen] Cash left after | 12 USDC | Reject | 3 of 4
+  [payer screen] Pay 3 USDC? | Reject | 4 of 4 | Hold to sign
+    reader > card e0230000a1153a5aa5e15f13c92760b65aae8ccfa7c51614159858effd232b4033e47d90003d41ec34ecaeda9400000000002dc6c00000000000000000ffffffffffffffff92cf22b906e645660096feef5cdd4d307576b706d1606afd7eb1c114687e967f1bb36e61d24de85774aec8f02de7714e257dafe4ee46c96e84bfd252261ef36e0955ab779a58332816f24dc31a7972d39f691e4d07f350861f92760dfee33aeb3f  (card pulled away, not delivered)
+  tap: card removed after 2 APDU(s)
+  TAP_STATUS SIGNED_NO_RECEIPT sw B008   payer screen: Sending payment | Signed 3 USDC | Card left after signing | Cash debited, no  | receipt
+  SIGNED, NO RECEIPT: cash 15 -> 12 (debit before release), auth kept on the payer (TAP_STATUS)
+== payee checks: high-s copy refused, a rejected new request clears the old one
+  [payee] Request 7 USDC | For: cake | Reject | Approve
+  high-s auth -> B005; SET_REQUEST rejected on screen -> GET_REQUEST B006 (old request gone)
+  payee GET_AUTHS -> auths.json (1 auth)
+== 3. chain (online, later): anyone settles the payee's auths
+  balances before:
+  0x153a5aA5E15f13C92760B65AAE8cCfa7C5161415 100.000000 USDC
+  0x9858EfFD232B4033E47d90003D41EC34EcaEda94 0.000000 USDC
+  #0 success tx 0xb65f16028d01cc5fd856b562dc3a7d7058323da0d7fbb26a6848f09adb83dae5 value 5.000000 USDC nonce 0x626514547f87efdb350553ba82d630ba644f8a6b4c9665f45669475bb54a1384
+     from 0x153a5aA5E15f13C92760B65AAE8cCfa7C5161415 100.000000 USDC -> 95.000000 USDC
+     to   0x9858EfFD232B4033E47d90003D41EC34EcaEda94 0.000000 USDC -> 5.000000 USDC
+  0x153a5aA5E15f13C92760B65AAE8cCfa7C5161415 95.000000 USDC
+  0x9858EfFD232B4033E47d90003D41EC34EcaEda94 5.000000 USDC
+  #0 REJECTED already used nonce 0x626514547f87efdb350553ba82d630ba644f8a6b4c9665f45669475bb54a1384
+ALL PASS

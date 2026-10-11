@@ -1,0 +1,168 @@
+--- a/speculos/mcu/seproxyhal.py
++++ b/speculos/mcu/seproxyhal.py
+@@ -1,5 +1,6 @@
+ import logging
+ import os
++import socket as socketlib
+ import struct
+ import sys
+ import threading
+@@ -19,6 +20,7 @@
+ from .ocr import OCR
+ from .readerror import ReadError
+ from .transport import TransportType, build_transport
++from .transport.nfc import NFC
+ 
+ 
+ class SephTag(IntEnum):
+@@ -27,6 +29,8 @@
+     DISPLAY_PROCESSED_EVENT = 0x0D
+     TICKER_EVENT = 0x0E
+     CAPDU_EVENT = 0x16
++    ITC_EVENT = 0x1A  # ledger-cash patch
++    NFC_EVENT = 0x1E  # ledger-cash patch
+ 
+     MCU = 0x31
+     TAG_NFC_POWER = 0x34
+@@ -46,6 +50,7 @@
+     DBG_SCREEN_DISPLAY_STATUS = 0x5E
+     PRINTC_STATUS = 0x5F
+     NBGL_SEND_SPECULOS_TEXT_LINE = 0x5A
++    ITC_CMD = 0x5D  # ledger-cash patch
+ 
+     GENERAL_STATUS = 0x60
+     GENERAL_STATUS_LAST_COMMAND = 0x0000
+@@ -297,12 +302,71 @@
+         self.time_ticker_thread.start()
+ 
+         self.transport = build_transport(self.socket_helper.queue_packet, transport)
++        # ledger-cash patch: a --transport NFC instance keeps a USB/HID host link too, as a real device does.
++        # to_app() sends "USB!"-prefixed packets over it, so host commands arrive as USB, not NFC.
++        self.usb = self.transport
++        if transport is TransportType.NFC:
++            self.usb = build_transport(self.socket_helper.queue_packet, TransportType.HID)
+ 
+         self.ocr = OCR(model)
+ 
+         # A list of callback methods when an APDU response is received
+         self.apdu_callbacks: list[Callable[[bytes], None]] = []
+ 
++        # ledger-cash patch: NFC reader emulation (the MCU side of io_nfc_reader_*).
++        # nfc_power mirrors SEPROXYHAL_TAG_NFC_POWER: 0 off, 1 card emulation, 2 reader.
++        # card holds the latched NFC_EVENT payload of a card in the field (01 01 <uid>), or None.
++        self.nfc_power = 0
++        self.card: bytes | None = None
++        self.reader_nfc = NFC(self.socket_helper.queue_packet, TransportType.NFC)
++        self.reader_client: socketlib.socket | None = None
++        port = os.environ.get("SPECULOS_NFC_READER_PORT")
++        if port:
++            threading.Thread(target=self._nfc_reader_server, args=(int(port),), daemon=True).start()
++
++    def _nfc_field(self, event: bytes):
++        """Card enters (01 01 uid) or leaves (02) the field. The app only hears it while its reader is on."""
++        if event[:1] == b"\x01":
++            self.card = event
++        elif self.card is None:
++            return
++        else:
++            self.card = None
++        if self.nfc_power == 2:
++            self.socket_helper.queue_packet(SephTag.NFC_EVENT, event)
++
++    def _nfc_reader_server(self, port: int):
++        """
++        One TCP client at a time. Frames both ways: 4-byte big-endian length, then 1 type byte + body.
++        client -> speculos: b"E" + NFC_EVENT payload (01 01 <uid> card detected, 02 card removed)
++                            b"R" + response to the last reader command (reaches the app as packet type 0x41)
++        speculos -> client: b"C" + command the app sent with io_nfc_reader_send
++        Disconnecting removes the card.
++        """
++        srv = socketlib.create_server(("0.0.0.0", port))  # noqa: S104 (inside the container)
++        self.logger.info(f"NFC reader port {port}")
++        while True:
++            conn, _ = srv.accept()
++            self.reader_client = conn
++            f = conn.makefile("rb")
++            try:
++                while len(hdr := f.read(4)) == 4:
++                    frame = f.read(int.from_bytes(hdr, "big"))
++                    kind, body = frame[:1], frame[1:]
++                    self.logger.info(f"nfc-reader > {frame.hex()}")
++                    if kind == b"E":
++                        self._nfc_field(body)
++                    elif kind == b"R" and self.nfc_power == 2:
++                        self.reader_nfc.send(body)
++                    else:
++                        self.logger.warning(f"nfc-reader: dropped {frame.hex()} (nfc_power={self.nfc_power})")
++            except OSError:
++                pass
++            finally:
++                self.reader_client = None
++                conn.close()
++                self._nfc_field(b"\x02")
++
+     @property
+     def file(self):
+         return self._socket
+@@ -424,10 +488,10 @@
+                 c(data)
+ 
+         elif tag == SephTag.USB_CONFIG:
+-            self.transport.config(data)
++            self.usb.config(data)  # ledger-cash patch (was self.transport)
+ 
+         elif tag == SephTag.USB_EP_PREPARE:
+-            data = self.transport.prepare(data)
++            data = self.usb.prepare(data)  # ledger-cash patch (was self.transport)
+             if data:
+                 for c in self.apdu_callbacks:
+                     c(data)
+@@ -437,7 +501,17 @@
+             pass
+ 
+         elif tag == SephTag.TAG_NFC_POWER:
+-            pass
++            # ledger-cash patch
++            self.logger.info(f"NFC_POWER {data.hex()}")
++            self.nfc_power = data[0]
++            if self.nfc_power == 2 and self.card:
++                self.socket_helper.queue_packet(SephTag.NFC_EVENT, self.card)
++
++        elif tag == SephTag.ITC_CMD:
++            # ledger-cash patch: on hardware the ITC command comes back as an ITC event, which the
++            # app's own IO stack turns into NFC_LEDGER_start/stop (os_io.c process_itc_event).
++            self.logger.info(f"ITC_CMD {data.hex()}")
++            self.socket_helper.queue_packet(SephTag.ITC_EVENT, data)
+ 
+         elif tag == SephTag.TAG_BLE_SEND:
+             pass
+@@ -546,6 +620,20 @@
+                 raise ValueError("Display is not an instance of NBGL")
+             screen.display.nbgl_gl.hal_draw_image_file(data)
+ 
++        elif tag == SephTag.NFC_RAPDU and self.nfc_power == 2:
++            # ledger-cash patch: reader command, not a card-emulation reply
++            cmd = self.reader_nfc.handle_rapdu(data)
++            if cmd is not None:
++                self.logger.info(f"nfc-reader < {cmd.hex()}")
++                client = self.reader_client
++                if client is None:
++                    self.logger.warning("nfc-reader: no client, command dropped")
++                else:
++                    try:
++                        client.sendall((1 + len(cmd)).to_bytes(4, "big") + b"C" + cmd)
++                    except OSError:
++                        self.logger.warning("nfc-reader: send failed, command dropped")
++
+         elif tag == SephTag.NFC_RAPDU:
+             data = self.transport.handle_rapdu(data)
+             if data is not None:
+@@ -617,6 +705,8 @@
+         if packet.startswith(b"RAW!") and len(packet) > 4:
+             tag, packet = packet[4], packet[5:]
+             self.socket_helper.queue_packet(SephTag(tag), packet)
++        elif packet.startswith(b"USB!"):  # ledger-cash patch
++            self.usb.send(packet[4:])
+         else:
+             self.transport.send(packet)
+ 

@@ -6,3 +6,7 @@ spikes/ledgerblue-and-app-toolchain/app-boilerplate-rust/
 !spikes/speculos-dmk-sign/run13-flex.log
 !spikes/speculos-dmk-sign/run14-nanos2.log
 .claude/skills/
+__pycache__/
+!mvp/ledger-cash/**/*.log
+__pycache__/
+*.pyc

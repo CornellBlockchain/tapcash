@@ -1,0 +1,79 @@
+--- a/Makefile
++++ b/Makefile
+@@ -97,7 +97,9 @@
+ # Application communication interfaces #
+ ########################################
+ ENABLE_BLUETOOTH = 1
+-#ENABLE_NFC = 1
++ENABLE_NFC = 1
++ENABLE_NFC_READER = 1
++DISABLE_OS_IO_STACK_USE = 1
+ ENABLE_NBGL_FOR_NANO_DEVICES = 1
+ 
+ ########################################
+--- a/src/apdu/dispatcher.c
++++ b/src/apdu/dispatcher.c
+@@ -112,6 +112,17 @@
+ 
+             return handler_provide_token_info(&buf);
+ 
++#ifdef HAVE_NFC_READER
++        case 0x50: {
++            extern void nfc_probe_start(void);
++            nfc_probe_start();
++            return io_send_sw(SWO_SUCCESS);
++        }
++        case 0x51: {
++            extern int nfc_probe_get(void);
++            return nfc_probe_get();
++        }
++#endif
+         default:
+             return io_send_sw(SWO_INVALID_INS);
+     }
+--- a/src/nfc_probe.c
++++ b/src/nfc_probe.c
+@@ -0,0 +1,43 @@
++#ifdef HAVE_NFC_READER
++#include <string.h>
++#include "os.h"
++#include "os_io_legacy.h"
++#include "io.h"
++#include "sw.h"
++
++// ponytail: Speculos tap probe. INS 0x50 starts the reader; on CARD_DETECTED it sends the
++// boilerplate GET_VERSION to the card; INS 0x51 returns [state][resp...] over USB.
++static const uint8_t GET_VERSION_APDU[] = {0xE0, 0x03, 0x00, 0x00, 0x00};
++
++// state: 0 = nothing yet, 1 = response, 2 = error (card removed), 3 = timeout
++static uint8_t probe_out[1 + 271];
++static size_t resp_len;  // ponytail: no initialised .data allowed in Ledger apps
++
++static void on_resp(bool error, bool timeout, uint8_t *data, size_t len) {
++    // data points into the shared SEPH buffer: copy now
++    probe_out[0] = error ? 2 : timeout ? 3 : 1;
++    if (len > sizeof(probe_out) - 1) len = sizeof(probe_out) - 1;
++    if (data != NULL) memcpy(probe_out + 1, data, len);
++    resp_len = data != NULL ? len : 0;
++}
++
++static void on_evt(enum nfc_event event, struct card_info *info) {
++    UNUSED(info);
++    if (event == CARD_DETECTED) {
++        io_nfc_reader_send(GET_VERSION_APDU, sizeof(GET_VERSION_APDU), on_resp, 2000);
++    }
++    else {
++        io_nfc_reader_stop();  // card left: power the reader off (ITC 0x10 -> NFC_POWER 00)
++    }
++}
++
++void nfc_probe_start(void) {
++    probe_out[0] = 0;
++    resp_len = 0;
++    io_nfc_reader_start(on_evt);
++}
++
++int nfc_probe_get(void) {
++    return io_send_response_pointer(probe_out, 1 + resp_len, SWO_SUCCESS);
++}
++#endif
