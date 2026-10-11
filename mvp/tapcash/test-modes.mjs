@@ -113,4 +113,14 @@ await touch(420, 142);  // off
 await touch(50, 48);
 assert.match(await home(), /Hold your iPhone/);
 await assertReview(1);
+// Card mode times out after one minute
+await press('Turn on card mode');
+await press('Turn on');
+await sleep(2500);
+assert.match(await home(), /Card mode is on for 1 minute/);
+await sleep(60000);
+assert.match(await screen(), /Card mode timed out/);
+await sleep(3500);
+assert.match(await home(), /Turn on card mode/);
+await assertReview(4);
 console.log('ok card + pocket', flex);

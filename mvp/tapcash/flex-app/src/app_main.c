@@ -77,9 +77,10 @@ static bool pocket_paid_valid;        // false until a one-tap payment, and once
 
 // Card mode: turned on right before paying, it lets the next payment be signed on the first tap,
 // without review and with no amount limit, like a card the merchant's terminal (the iPhone) charges.
-// It turns off after that one payment, when turned off, or when the app closes (RAM only).
-// ponytail: no timeout once on (no clock on the Flex); add one with an nbgl ticker if that matters.
+// It turns off after that one payment, after one minute, when turned off, or when the app closes (RAM only).
+#define CARD_MODE_TICKS 600  // SDK ticker events come every 100 ms: one minute
 static bool card_mode;
+static uint16_t card_ticks_left;
 static char home_text[80];
 
 static void app_quit(void) {
@@ -112,7 +113,7 @@ static void ui_update(void) {
     settings_contents[2].content.choicesList.initChoice = total_idx;
     settings_contents[3].content.choicesList.initChoice = count_idx;
     if (card_mode) {
-        snprintf(home_text, sizeof(home_text), "Card mode is on:\nthe next tap pays");
+        snprintf(home_text, sizeof(home_text), "Card mode is on for 1 minute:\nthe next tap pays");
     } else if (pocket_left) {
         char left[24];
         format_usdc(left, sizeof(left), pocket_left);
@@ -207,7 +208,16 @@ static void card_choice(bool confirm) {
         return;
     }
     card_mode = true;
+    card_ticks_left = CARD_MODE_TICKS;
     nbgl_useCaseStatus("Card mode on", true, ui_home);
+}
+
+// Called by the SDK's IO loop on every ticker event
+void app_ticker_event_callback(void) {
+    if (card_mode && --card_ticks_left == 0) {
+        card_mode = false;
+        nbgl_useCaseStatus("Card mode timed out", false, ui_home);
+    }
 }
 
 static void card_toggle(void) {
@@ -219,7 +229,8 @@ static void card_toggle(void) {
     nbgl_useCaseChoice(&C_tapcash_64px,
                        "Turn on card mode?",
                        "The next payment an iPhone asks for goes out on the first tap, "
-                       "with no review and no limit, like tapping a card. Then card mode turns off.",
+                       "with no review and no limit, like tapping a card. Card mode then turns off, "
+                       "or after one minute.",
                        "Turn on",
                        "Cancel",
                        card_choice);

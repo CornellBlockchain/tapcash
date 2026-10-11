@@ -64,7 +64,7 @@ Pocket mode is optional, and off by default. With it off, every payment takes th
 Card mode is for paying like a card: you turn it on right before paying, and the payment terminal (the iPhone) sets the amount.
 - On the Flex home screen, touch "Turn on card mode" and confirm.
 - The next payment, of any amount, is signed on the first tap with no review. Then card mode turns off by itself.
-- It also turns off with "Turn off card mode" or when the app closes. It doesn't spend the pocket mode budget.
+- It also turns off after one minute if no payment comes, with "Turn off card mode", or when the app closes. It doesn't spend the pocket mode budget.
 - The Flex shows what it paid, and to whom, right after.
 - The risk: while it's on, whoever taps the Flex sets the amount, and on-chain payments can't be charged back. Turn it on only at the moment you pay.
 
