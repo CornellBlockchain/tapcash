@@ -115,7 +115,7 @@ def down():
     print("stopped")
 
 
-PAGE = """<!doctype html><meta charset=utf-8><title>ledger-cash live demo</title>
+PAGE = r"""<!doctype html><meta charset=utf-8><title>ledger-cash live demo</title>
 <style>body{font:15px system-ui;background:#16181d;color:#eee;margin:16px}.row{display:flex;gap:24px;flex-wrap:wrap}
 .dev{text-align:center}img{width:360px;height:450px;border:2px solid #444;border-radius:12px;cursor:pointer;background:#fff;user-select:none}
 button{font:15px system-ui;margin:4px;padding:8px 12px;border-radius:8px;border:0;background:#ff5a1f;color:#fff;cursor:pointer}
@@ -129,8 +129,7 @@ pre{background:#000;padding:10px;max-width:760px;height:220px;overflow:auto;whit
 <button onclick="act('status')">Status</button><button onclick="act('settle')">3. Settle on-chain</button></p>
 <pre id=log>ready</pre>
 <script>
-const log=t=>{const l=document.getElementById('log');l.textContent+="
-"+t;l.scrollTop=1e9};
+const log=t=>{const l=document.getElementById('log');l.textContent+="\n"+t;l.scrollTop=1e9};
 async function act(a){log('> '+a);const r=await fetch('/act/'+a,{method:'POST'});log(await r.text())}
 for(const d of ['payer','payee']){const im=document.getElementById(d);
  setInterval(()=>{im.src='/'+d+'/screenshot?'+Date.now()},700);
