@@ -6,8 +6,10 @@
   button { font-size: 20px; padding: 14px 24px; }
   input { font-size: 20px; width: 8em; }
   pre { white-space: pre-wrap; word-break: break-all; font-size: 13px; }
+  header { display: flex; align-items: center; gap: 10px; }
+  header h1 { margin: 0; font-size: 22px; }
 </style>
-<h1>TapCash</h1>
+<header><svg viewBox="0 0 512 512" width="32" height="32" aria-hidden="true"><rect width="512" height="512" rx="112" fill="#0E0E10"/><g transform="rotate(-12 256 256)" fill="none" stroke-width="26" stroke-linecap="round"><rect x="176" y="136" width="160" height="240" rx="30" stroke="#fff"/><rect x="204" y="292" width="104" height="56" rx="12" stroke="#fff" stroke-width="20"/><path d="M319 99A66 66 0 0 1 373 153M341 61A108 108 0 0 1 411 131M193 413A66 66 0 0 1 139 359M171 451A108 108 0 0 1 101 381" stroke="#C6FF3D"/></g></svg><h1>TapCash</h1></header>
 <p>Receive <input id="amount" type="number" inputmode="decimal" value="1" min="0.000001" step="any"> USDC</p>
 <p><button id="go">Tap Ledger</button></p>
 <pre id="wallet"></pre>
