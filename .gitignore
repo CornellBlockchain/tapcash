@@ -10,3 +10,7 @@ __pycache__/
 !mvp/ledger-cash/**/*.log
 __pycache__/
 *.pyc
+
+# third-party clones for reading only (untrusted, never run); notes are committed
+prior-art/*/
+!prior-art/industry/
