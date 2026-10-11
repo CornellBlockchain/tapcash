@@ -45,6 +45,17 @@ Before the first payment:
 - Fund the Flex address with Base Sepolia USDC from faucet.circle.com.
 - Send about 0.001 Base Sepolia ETH to the iPhone wallet shown on the page.
 
+## Pocket mode (one tap)
+
+Pocket mode is optional, and off by default. With it off, every payment takes the usual two taps with a review on the Flex.
+- On the Flex home screen, touch "Turn on pocket mode" and confirm once.
+- After that, any payment of 5 USDC or less is signed on the first tap, with no review. The second tap isn't needed, and the page needs no change.
+- Pocket mode stops at 20 USDC in total, or when the app closes, since the budget lives only in the app's memory.
+- Bigger payments, or payments past the budget, fall back to the two-tap review.
+- The home screen shows what's left, and "Turn off pocket mode" ends it at once.
+- The risk is like a contactless card's no-PIN limit: someone who taps your open, unlocked Flex can take at most what's left of the budget.
+- `node test-pocket.mjs` checks it on Speculos, starting from a fresh home screen.
+
 ## Cash out to a card (sandbox)
 
 After a payment, "Cash out to card" sends the iPhone wallet's USDC to a cash-out address. `web/api/cashout.mjs` then reads the amount from the on-chain receipt and issues a [Lithic](https://lithic.com) sandbox virtual card with that spend limit. "Buy a $3.50 coffee" runs a simulated card authorization against it.

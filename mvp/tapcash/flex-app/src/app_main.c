@@ -59,19 +59,72 @@ static char review_text[80];
 static uint8_t response[1 + 4 + 72 + 20];
 static size_t response_len;
 
+// Pocket mode: after one approval on the Flex, payments up to POCKET_PER_TAP are signed on the
+// first tap, without review, until POCKET_TOTAL is spent or the app closes (RAM only).
+// ponytail: fixed caps and no time limit (no clock on the Flex); add a settings page if caps should vary.
+#define POCKET_PER_TAP 5000000   // micro-USDC: 5 USDC
+#define POCKET_TOTAL   20000000  // 20 USDC
+static uint64_t pocket_left;          // 0 = off
+static uint8_t pocket_paid[REQ_LEN];  // last pocket payment, so a retried tap gets the same reply
+static bool pocket_paid_valid;        // false until a pocket payment, and once `response` changes
+static char home_text[80];
+
 static void app_quit(void) {
     os_sched_exit(-1);
 }
 
+static void format_usdc(char *out, size_t len, uint64_t micro) {
+    memset(out, 0, len);  // SDK format_fpu64 doesn't NUL-terminate amounts >= 1
+    format_fpu64_trimmed(out, len, micro, 6);
+}
+
+static void pocket_toggle(void);
+
 static void ui_home(void) {
+    static nbgl_homeAction_t action;  // filled at runtime: apps can't have initialized .data
+    action.callback = pocket_toggle;
+    action.style = SOFT_HOME_ACTION;
+    if (pocket_left) {
+        char left[24];
+        format_usdc(left, sizeof(left), pocket_left);
+        snprintf(home_text, sizeof(home_text), "Pocket mode: %s USDC left\nHold your iPhone\nnear the screen", left);
+        action.text = "Turn off pocket mode";
+    } else {
+        snprintf(home_text, sizeof(home_text), "Hold your iPhone\nnear the screen");
+        action.text = "Turn on pocket mode";
+    }
     nbgl_useCaseHomeAndSettings(APPNAME,
                                 &C_tapcash_64px,
-                                "Hold your iPhone\nnear the screen",
+                                home_text,
                                 INIT_HOME_PAGE,
                                 NULL,
                                 NULL,
-                                NULL,
+                                &action,
                                 app_quit);
+}
+
+static void pocket_choice(bool confirm) {
+    if (!confirm) {
+        ui_home();
+        return;
+    }
+    pocket_left = POCKET_TOTAL;
+    nbgl_useCaseStatus("Pocket mode on", true, ui_home);
+}
+
+static void pocket_toggle(void) {
+    if (pocket_left) {
+        pocket_left = 0;
+        nbgl_useCaseStatus("Pocket mode off", true, ui_home);
+        return;
+    }
+    nbgl_useCaseChoice(&C_tapcash_64px,
+                       "Turn on pocket mode?",
+                       "Payments up to 5 USDC go out on the first tap, without review. "
+                       "20 USDC in total, until you close the app.",
+                       "Turn on",
+                       "Cancel",
+                       pocket_choice);
 }
 
 static bool get_address(uint8_t out[20]) {
@@ -103,6 +156,7 @@ static size_t der_int(uint8_t *out, const uint8_t v[32]) {
 static bool sign_request(void) {
     uint8_t from[20], buf[7 * 32], digest[32], r[32], s[32];
     uint32_t info = 0;
+    pocket_paid_valid = false;  // `response` is about to change
     if (!get_address(from)) {
         return false;
     }
@@ -155,9 +209,9 @@ static void review_choice(bool confirm) {
 }
 
 static void start_review(const uint8_t *kh) {
-    char amount[24] = {0};  // SDK format_fpu64 doesn't NUL-terminate amounts >= 1
+    char amount[24];
     memcpy(request, kh, REQ_LEN);
-    format_fpu64_trimmed(amount, sizeof(amount), read_u64_be(request, 20), 6);
+    format_usdc(amount, sizeof(amount), read_u64_be(request, 20));
     size_t n = snprintf(review_text, sizeof(review_text), "%s USDC on Base Sepolia\nto 0x", amount);
     format_hex(request, 20, review_text + n, sizeof(review_text) - n);
     state = REVIEW;
@@ -239,6 +293,32 @@ static void handle_u2f_sign(uint8_t p1, const uint8_t *data, int lc) {
         io_send_response_pointer(response, response_len, SW_OK);
         nbgl_useCaseStatus("Sent to iPhone", true, ui_home);
         return;
+    }
+
+    // Pocket mode: small payments are signed on this tap, without review. Not while a review is open.
+    if (pocket_left && state != REVIEW) {
+        if (pocket_paid_valid && memcmp(kh, pocket_paid, REQ_LEN) == 0) {  // iOS retried a tap we already paid
+            io_send_response_pointer(response, response_len, SW_OK);
+            return;
+        }
+        uint64_t value = read_u64_be(kh, 20);
+        if (value <= POCKET_PER_TAP && value <= pocket_left) {
+            memcpy(request, kh, REQ_LEN);
+            if (!sign_request()) {
+                io_send_sw(SW_CRYPTO);
+                return;
+            }
+            state = IDLE;  // an approved but uncollected review is dropped: its response was overwritten
+            pocket_left -= value;
+            memcpy(pocket_paid, kh, REQ_LEN);
+            pocket_paid_valid = true;
+            io_send_response_pointer(response, response_len, SW_OK);
+            char amount[24];
+            format_usdc(amount, sizeof(amount), value);
+            snprintf(review_text, sizeof(review_text), "Paid %s USDC", amount);
+            nbgl_useCaseStatus(review_text, true, ui_home);
+            return;
+        }
     }
 
     io_send_sw(SW_NOT_SATISFIED);
