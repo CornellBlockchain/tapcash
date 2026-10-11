@@ -1,0 +1,5 @@
+<resources>
+    <string name="app_name">Ledger Cash Payee</string>
+    <string name="service_desc">Ledger Cash payee (answers a Ledger Flex tap)</string>
+    <string name="aid_desc">Ledger Cash</string>
+</resources>
