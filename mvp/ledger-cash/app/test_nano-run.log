@@ -1,0 +1,38 @@
+== devices: payer + payee Nano S Plus (speculos nanosp), USB only
+  [payer] Set USDC network
+  [payer] Set US...ork (1/2) | Chain ID 31337 | USDC  | 0x5FBDB2315678AFEC
+  [payer] Set US...rk (2/2) | B367F032D93F642F6 | 4180AA3
+  [payer] Approve
+  [payee] Set USDC network
+  [payee] Set US...ork (1/2) | Chain ID 31337 | USDC  | 0x5FBDB2315678AFEC
+  [payee] Set US...rk (2/2) | B367F032D93F642F6 | 4180AA3
+  [payee] Approve
+  [payer] Load 10 USDC as cash
+  [payer] Load 10... as cash | Cash after: 10 USDC
+  [payer] Approve
+  [payee] Request 5 USDC
+  [payee] Request 5 USDC | For: coffee-and- | croissant-x2
+  [payee] Approve
+  [payer] Pay with | USDC cash
+  [payer] Pay | 5 USDC
+  [payer] To | 0x9858EFFD232B4033 | E47D90003D41EC34E | CAEDA94
+  [payer] For | coffee-and-croissant- | x2
+  [payer] Cash left after | 5 USDC
+  [payer] Pay 5 USDC?
+  [payer] Reject transaction
+  [payer] Pay with | USDC cash
+  [payer] Pay | 5 USDC
+  [payer] To | 0x9858EFFD232B4033 | E47D90003D41EC34E | CAEDA94
+  [payer] For | coffee-and-croissant- | x2
+  [payer] Cash left after | 5 USDC
+  [payer] Pay 5 USDC?
+  PAY approved on the Nano: 10 -> 5 USDC, EIP-712 auth recovers to the payer; replay -> B004
+  PUT_AUTH accepted on the payee Nano, receipt verifies, GET_AUTHS returns the auth
+== chain: deploy, fund the payer, settle the payee's auth
+  token 0x5FbDB2315678afecb367f032d93F642f64180aa3 chainId 31337 tx 0xfbfa126cb1e320eda35a0e8bf278195e886d79547544826678a8314ff0b113ec
+  minted 10 USDC to 0x153a5aA5E15f13C92760B65AAE8cCfa7C5161415 tx 0x91ff6a7b5fbb21e0db9829b04a07fe7eaa851c805a936ab1bb494f2897a8e4e5 balance 10.000000 USDC
+  #0 success tx 0x82073f77a3eb55a31485eb4f5a26ba8bacd8ff2ec14684b3e0142a32dbaaf4e2 value 5.000000 USDC nonce 0x48a9f8aad60c25bc6a0ce9a31b882ed5639ca2a9bf363aa7f9785c6d07f68194
+     from 0x153a5aA5E15f13C92760B65AAE8cCfa7C5161415 10.000000 USDC -> 5.000000 USDC
+     to   0x9858EfFD232B4033E47d90003D41EC34EcaEda94 0.000000 USDC -> 5.000000 USDC
+  #0 REJECTED already used nonce 0x48a9f8aad60c25bc6a0ce9a31b882ed5639ca2a9bf363aa7f9785c6d07f68194
+ALL PASS

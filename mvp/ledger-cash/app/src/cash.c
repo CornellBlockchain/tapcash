@@ -29,6 +29,8 @@
 
 #if defined(TARGET_APEX_P)
 #define ICON C_app_boilerplate_48px
+#elif defined(TARGET_NANOS2) || defined(TARGET_NANOX)
+#define ICON C_app_boilerplate_14px  // Nano: USB-only build (no HAVE_NFC), no tap
 #else
 #define ICON C_app_boilerplate_64px
 #endif
@@ -129,20 +131,25 @@ static bool g_busy;  // a review is on screen: refuse other APDUs so the screen 
 
 static char s_amount[32], s_after[32], s_addr[43], s_label[LABEL_LEN + 1], s_msg[112], s_sub[96];
 static char s_tagline[80];
-static nbgl_homeAction_t g_home_action;
+enum { PAY_NONE, PAY_USB, PAY_TAP };  // who opened the review on screen
+static uint8_t g_pay_src;
 
+#ifdef HAVE_NFC_READER
+static nbgl_homeAction_t g_home_action;
 // payer tap state, reported by TAP_STATUS
 enum { TAP_IDLE, TAP_WAIT, TAP_BUSY, TAP_SENT, TAP_PAID, TAP_FAILED, TAP_NO_RECEIPT };
-enum { PAY_NONE, PAY_USB, PAY_TAP };  // who opened the review on screen
-static uint8_t g_tap, g_pay_src;
+static uint8_t g_tap;
 static uint16_t g_tap_sw;
 static uint8_t g_tap_auth[AUTH_LEN];     // last auth signed by a tap (kept if no receipt came back)
 static uint8_t g_tap_cmd[5 + AUTH_LEN];  // PUT_AUTH command sent to the card
+#endif
 
 static const uint32_t PATH[] = {0x8000002C, 0x8000003C, 0x80000000, 0, 0};  // 44'/60'/0'/0/0
 
 static void ui_home(void);
+#ifdef HAVE_NFC_READER
 static void tap_menu(void);
+#endif
 
 /* ---------------- crypto ---------------- */
 static void keccak(const uint8_t *in, size_t len, uint8_t out[32]) {
@@ -340,11 +347,15 @@ static void ui_home(void) {
         fmt_usdc(amt, sizeof(amt), NV.wallet.balance);
         snprintf(s_tagline, sizeof(s_tagline), "Cash: %s", amt);
     }
+#ifdef HAVE_NFC_READER
     g_home_action.text = "Pay by tap";
     g_home_action.callback = tap_menu;
     g_home_action.style = STRONG_HOME_ACTION;
     nbgl_useCaseHomeAndSettings(APPNAME, &ICON, s_tagline, INIT_HOME_PAGE, NULL, NULL, &g_home_action,
                                 app_quit);
+#else
+    nbgl_useCaseHomeAndSettings(APPNAME, &ICON, s_tagline, INIT_HOME_PAGE, NULL, NULL, NULL, app_quit);
+#endif
 }
 
 /* ---------------- SET_CONFIG ---------------- */
@@ -516,15 +527,19 @@ static uint16_t pay_sign(uint8_t a[AUTH_LEN]) {
     return SW_OK;
 }
 
+#ifdef HAVE_NFC_READER
 static void tap_choice(bool ok);
+#endif
 
 static void pay_choice(bool ok) {
     uint8_t src = g_pay_src;
     g_pay_src = PAY_NONE;
+#ifdef HAVE_NFC_READER
     if (src == PAY_TAP) {
         tap_choice(ok);
         return;
     }
+#endif
     if (src != PAY_USB) return;  // stale review (its tap already ended): nothing to answer
     g_busy = false;
     if (!ok) {
@@ -572,6 +587,7 @@ static int pay(const uint8_t *d, size_t len) {
     return sw == SW_OK ? 0 : io_send_sw(sw);
 }
 
+#ifdef HAVE_NFC_READER
 /* ---------------- TAP_TO_PAY (payer = NFC reader, payee = card emulation) ----------------
  * Never answers over USB: the host polls TAP_STATUS. Every exit goes through tap_end().
  * Cash rule: the debit is persisted (pay_sign) before PUT_AUTH carries the signature out, so a card
@@ -721,6 +737,7 @@ static int tap_status(void) {
     memcpy(out + 3, g_tap_auth, AUTH_LEN);
     return io_send_response_pointer(out, sizeof(out), SW_OK);
 }
+#endif  // HAVE_NFC_READER
 
 /* ---------------- PUT_AUTH / GET_AUTHS (payee) ---------------- */
 static int put_auth(const uint8_t *a, size_t len) {
@@ -751,7 +768,12 @@ static int put_auth(const uint8_t *a, size_t len) {
     fmt_addr(s_addr, a + A_FROM);
     fmt_usdc(s_amount, sizeof(s_amount), read_u64_be(a, A_VALUE));
     // Not "Received": any key can sign a matching auth; nothing here proves funds (README Honest limits)
+#if defined(TARGET_NANOS2) || defined(TARGET_NANOX)
+    // 128x64 status fits ~4 lines: short address (full one via GET_AUTHS), else "Not settled yet" is cut off
+    snprintf(s_msg, sizeof(s_msg), "IOU %s from\n%.*s...%s\nNot settled yet", s_amount, 6, s_addr, s_addr + 37);
+#else
     snprintf(s_msg, sizeof(s_msg), "Signed IOU for %s\nfrom %s\nNot settled yet", s_amount, s_addr);
+#endif
     io_send_response_pointer(out, sizeof(out), SW_OK);
     nbgl_useCaseStatus(s_msg, true, ui_home);
     return 0;
@@ -772,12 +794,16 @@ static int dispatch(const command_t *c) {
     if (c->cla != CLA) return io_send_sw(SW_BAD_CLA);
     // Over NFC this app is only a payee card: anything else (balance, address, PAY/LOAD_CASH reviews,
     // TAP_TO_PAY) would be open to any reader in range.
+#ifdef HAVE_NFC
     if (G_io_app.apdu_media == IO_APDU_MEDIA_NFC && c->ins != INS_GET_REQUEST && c->ins != INS_PUT_AUTH) {
         return io_send_sw(SW_BAD_INS);
     }
+#endif
     // read-only status stays available while a screen is up (the host polls it during a tap)
     if (c->ins == INS_GET_BALANCE) return get_balance();
+#ifdef HAVE_NFC_READER
     if (c->ins == INS_TAP_STATUS) return tap_status();
+#endif
     if (g_busy) return io_send_sw(SW_BUSY);
     if (c->ins != INS_GET_AUTHS && (c->p1 || c->p2)) return io_send_sw(SW_BAD_P1P2);
     switch (c->ins) {
@@ -791,7 +817,9 @@ static int dispatch(const command_t *c) {
         case INS_PAY: return pay(c->data, c->lc);
         case INS_PUT_AUTH: return put_auth(c->data, c->lc);
         case INS_GET_AUTHS: return get_auths(c->p1);
+#ifdef HAVE_NFC_READER
         case INS_TAP_TO_PAY: return io_send_sw(tap_start());
+#endif
         default: return io_send_sw(SW_BAD_INS);
     }
 }

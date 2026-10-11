@@ -1,5 +1,99 @@
 # ledger-cash device app v0 (stage B): NOTES
 
+## Nano S Plus + CI stage (2026-10-11): PASS
+
+Status: **PASS.** `TARGET=nanos2` builds (exit 0, 0 warnings), `python -u test_nano.py` prints `ALL PASS` on two
+emulated Nano S Plus (`test_nano-run.log`), and `../demo.py` still prints `ALL PASS` on the Flex. The Flex build is
+**byte-identical** to HEAD: `app.sha256` `0a6c6cf932faa2dd034c577323d860d8830072ef2722f9c40ce05f8127b28589` both for
+HEAD's cash.c (built from `git archive HEAD` in a scratch dir) and for the new one. Nothing touched hardware.
+
+### What changed
+- `src/cash.c`: every tap path is under `#ifdef HAVE_NFC_READER` (tap state, `tap_*` functions, `TAP_TO_PAY` 0x30,
+  `TAP_STATUS` 0x31, the "Pay by tap" home action, `pay_choice`'s PAY_TAP branch); the "only payee INS over NFC" guard
+  is under `#ifdef HAVE_NFC`. The SDK defines both only for stax/flex/apex_p, so `ENABLE_NFC=1 ENABLE_NFC_READER=1`
+  stay in the Makefile and the Nano build is simply USB-only. On the Nano, 0x30 and 0x31 answer **6D00**. ISO SELECT
+  of the AID still answers 9000 (harmless over USB). Nano icon: `C_app_boilerplate_14px`. Nano-only payee status
+  string (`#if TARGET_NANOS2 || TARGET_NANOX`): `IOU 5 USDC from\n0x153A...61415\nNot settled yet`. The Flex string
+  (`Signed IOU for X\nfrom 0x<full>\nNot settled yet`) clipped on 128x64 after the first 16 address chars and lost
+  "Not settled yet". The full address is in GET_AUTHS.
+- `ledger_app.toml`: devices `["nanos+", "flex", "stax", "apex_p"]`.
+- New: `test_nano.py`, `../screens/nano/` (37 PNGs), `test_nano-run.log`, `../../../.github/workflows/device-apps.yml`.
+
+### Build (Git Bash)
+```bash
+MSYS_NO_PATHCONV=1 docker run --rm --memory 1g --name v1-build \
+  -v "C:/Users/sahas/Github Repos/ledger-op3n-n3xt-hackathon-26/mvp/ledger-cash/app:/app" \
+  ghcr.io/ledgerhq/ledger-app-builder/ledger-app-dev-tools:latest \
+  make -C /app TARGET=nanos2 BOLOS_SDK=/opt/nanosplus-secure-sdk APP_DIR=/app -j4     # ~20 s, exit 0
+# flex unchanged: TARGET=flex BOLOS_SDK=/opt/flex-secure-sdk
+# SDK dirs in the image: /opt/{nanos,nanox,nanosplus,flex,stax,apex}-secure-sdk
+```
+
+| target | app.elf | app.apdu | app.hex | app.sha256 | targetId (bolos_target.h) |
+|---|---|---|---|---|---|
+| flex | 241700 | 141517 | 190911 | `0a6c6cf9...b28589` (unchanged) | `0x33300004` |
+| nanos2 (Nano S Plus) | 165280 | 85588 | 115450 | `7e5cd26f837fb807b53a92aa4b4d098ac2296646e1166feb4333a4add1a01925` | `0x33100004` |
+
+Sideload (the boilerplate README's command; `--elfFile` makes ledgerblue read the targetId from the ELF). Ledger Live
+closed, device unlocked on the dashboard, confirm "Allow unsafe manager" on the device:
+```
+python -m ledgerblue.runScript --scp --fileName build/nanos2/bin/app.apdu --elfFile build/nanos2/bin/app.elf
+python -m ledgerblue.runScript --scp --fileName build/flex/bin/app.apdu   --elfFile build/flex/bin/app.elf
+```
+
+### test_nano.py (~70 s)
+`python -u test_nano.py` (needs build/nanos2/bin/app.elf, Docker, `npm ci` in ../settle, requests + eth-account).
+One container `v1-nano-speculos` (`--memory 1g`) runs both Speculos `--model nanosp` processes (payer REST :17000,
+seed as test.py; payee :17010, "abandon ... about"). Both must be up at once: the payee keeps its request in RAM with
+a random reqNonce, so a restarted payee can never accept an auth for an earlier request. Then the container is
+removed and `v1-anvil` (512m) starts: deploy.mjs (a fresh anvil gives the token `0x5FbDB...0aa3` the devices were
+configured with; asserted), fund.mjs payer 10, settle.mjs on the payee's GET_AUTHS, then settle again. Reuses demo.py's
+helpers (`anvil_up`, `node`, `device`, `auth_json`) and test.py's (`apdu`, `shot`, `auth_signer`, `recover191`,
+`balance`). UI driver: Speculos `/events` text; on each new page press `both` if it is `Approve` or ends in `?` (or
+starts with `Reject` in reject mode), else `right`.
+
+Asserts: SET_CONFIG (31337, anvil token) approved on both; LOAD_CASH 10 -> GET_BALANCE (10 USDC, 0, payer address);
+TAP_TO_PAY and TAP_STATUS -> 6D00; payee SET_REQUEST 5 "coffee-and-croissant-x2" (23-char label) approved, payeeSig
+recovers (eth_account); payer PAY rejected on screen -> 6985, cash unchanged; PAY approved -> 161-byte auth, EIP-712
+recovers to the payer, nonce = keccak(req[:92]), cash 5 / counter 1; PAY again -> B004; payee PUT_AUTH ->
+`01 || receipt`, receipt recovers to the payee; GET_AUTHS 0 == auth; settle `#0 success`, payer 10 -> 5, payee
+0 -> 5 USDC; second settle `REJECTED already used`.
+
+### Nano screens (128x64, NBGL for Nano; `../screens/nano/`)
+Speculos events text, `|` = line break on one page, `->` = right button:
+```
+Set USDC network -> Set US...ork (1/2) | Chain ID 31337 | USDC | 0x5FBDB2315678AFEC
+                 -> Set US...rk (2/2) | B367F032D93F642F6 | 4180AA3 -> Approve (both) -> Reject
+Load 10 USDC as cash -> Load 10... as cash | Cash after: 10 USDC -> Approve
+Request 5 USDC -> Request 5 USDC | For: coffee-and- | croissant-x2 -> Approve
+PAY: Pay with | USDC cash -> Pay | 5 USDC -> To | 0x9858EFFD232B4033 | E47D90003D41EC34E | CAEDA94
+     -> For | coffee-and-croissant- | x2 -> Cash left after | 5 USDC -> Pay 5 USDC? (both = sign)
+     -> Reject transaction (both = reject); then "Transaction signed" or the rejected status
+Home: "Cash: 0 USDC" (payer); "Receive 5 USDC to | 0x9858...EDA94" (payee with a request). No "Pay by tap".
+Payee after PUT_AUTH: "IOU 5 USDC from | 0x153A...61415 | Not settled yet"
+```
+- The 42-char "To" address is **not** split over pages: one page, three lines of 18/17/7 characters (screens 25, 32).
+- The 24-char label wraps to two lines on one page. The SET_CONFIG token address splits over 2 choice pages, and NBGL
+  shortens the choice title to "Set US...ork (1/2)" on them; "Load 10 USDC as cash" likewise becomes "Load 10... as
+  cash". Cosmetic, left as is.
+- No hold-to-sign on the Nano: both buttons on "Pay 5 USDC?" sign. Reject is the page after it.
+- Icons are still the boilerplate's (a star on the Nano).
+
+### CI: `.github/workflows/device-apps.yml`
+On push to `ledger-cash`/`main` touching `mvp/ledger-cash/app/**` (or the workflow file), and `workflow_dispatch`.
+Matrix job in `container: ghcr.io/ledgerhq/ledger-app-builder/ledger-app-dev-tools:latest` (`--user root`): checkout,
+`git config --global --add safe.directory '*'`, `make -C mvp/ledger-cash/app TARGET=<t> BOLOS_SDK=/opt/<sdk>-secure-sdk
+APP_DIR=$GITHUB_WORKSPACE/mvp/ledger-cash/app`. APP_DIR must be explicit: with git working, the SDK would set it to
+the **repo root**. Artifacts **`ledger-cash-flex`** and **`ledger-cash-nanosplus`**, each flat: `app.elf app.apdu
+app.hex app.sha256 LOAD.txt` (LOAD.txt = target, targetId, commit, sha256, and the runScript command above). Checked
+locally: the YAML parses (PyYAML); the two `run:` scripts, extracted with the matrix values substituted, ran in the
+dev-tools image as root on the repo mount (a git checkout): exit 0, same app.sha256 as the local builds. Not yet run
+on GitHub.
+
+### Re-check of the Flex
+`python -u ../demo.py` -> exit 0, `ALL PASS` (log kept in the scratchpad; the committed `../demo-run.log` was left
+as is, and `../auths.json`, which the run rewrites, was restored to HEAD).
+
 > Update (Integrate stage, 2026-10-10): NFC is now wired. TAP_TO_PAY (0x30) / TAP_STATUS (0x31), SELECT AID, the payee screens, and the reader-mode path are in src/cash.c. See ../NOTES.md and ../README.md. Statements below that NFC is not wired are stale.
 
 > Update (Fix stage, 2026-10-10): see ../NOTES.md "Fix stage". What changes below: `reqNonce` is random (`cx_rng_u32`),

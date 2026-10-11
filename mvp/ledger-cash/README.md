@@ -1,11 +1,13 @@
-# Ledger Cash v0: USDC as cash on a Ledger Flex, paid by tapping two Ledgers together
+# Ledger Cash v0: device-capped USDC cash on a Ledger Flex, paid by tapping two Ledgers together
 
-Ledger Cash makes a Ledger Flex work as a cash wallet for USDC. The owner **loads** a cash balance into the device and
-confirms it on screen. Later the owner **pays offline**: they hold their Flex against the payee's Ledger. The payer's
-Flex is the NFC **reader**; the payee's Ledger is the NFC **card** (card emulation). The payer's screen shows exactly
-who is paid, how much and for what. On approval the payer app signs a USDC EIP-3009 `TransferWithAuthorization` and
-hands it to the payee over NFC. The payee app checks it, stores it and returns a signed receipt. Later, when someone
-is online, **anyone** can submit the stored authorization on-chain to settle it.
+Ledger Cash makes a Ledger Flex work as a device-capped cash wallet for USDC: the chip caps what the owner can spend,
+but nothing is escrowed (see [Cash ladder](#cash-ladder-device-capped-iou-v0-to-escrowed-cash-v2)). The owner **loads**
+a device-capped cash balance into the device and confirms it on screen. Later the owner **pays offline**: they hold
+their Flex against the payee's Ledger. The payer's Flex is the NFC **reader**; the payee's Ledger is the NFC **card**
+(card emulation). The payer's screen shows exactly who is paid, how much and for what. On approval the payer app signs a
+USDC EIP-3009 `TransferWithAuthorization` and hands it to the payee over NFC. The payee app checks it, stores it and
+returns a signed receipt. Later, when someone is online, **anyone** can submit the stored authorization on-chain to
+settle it.
 
 What the payee holds after a tap is a **signed IOU**, not money: see [Honest limits](#honest-limits) before relying on
 it.
@@ -26,7 +28,7 @@ device yet; see [What changes on real hardware](#what-changes-on-real-hardware) 
  review: Pay / To / For / Cash left after
    (owner matches "To" with the payee's screen)
  Hold to sign -> sign EIP-712 in RAM,
-   debit cash + record nonce (one NVM write)
+   debit capped cash + record nonce (one NVM write)
    PUT_AUTH E023 + auth (161 B)         ---->    checks the auth (incl. low-s), stores it,
                                         <----    receipt (payee's signature over the auth)
  verifies receipt -> "Paid 5 USDC to 0x..."      "Signed IOU for 5 USDC from 0x... Not settled yet"
@@ -35,10 +37,11 @@ device yet; see [What changes on real hardware](#what-changes-on-real-hardware) 
                                                  -> USDC.transferWithAuthorization on-chain
 ```
 
-## Cash semantics (what the payer's secure element enforces)
+## Device-capped cash semantics (what the payer's secure element enforces)
 
 These rules protect the **payer's own spending**. They give the payee no assurance at all: nothing in a tap proves
-that the other side is a Ledger, runs this app, or has any cash counter (see [Honest limits](#honest-limits)).
+that the other side is a Ledger, runs this app, or has any device-capped cash counter (see
+[Honest limits](#honest-limits)).
 
 - **Load before you spend.** `LOAD_CASH` adds to a balance counter in the app's NVM, and only after the owner approves it
   on screen. The payer app refuses any payment above that balance (`B003`, nothing signed).
@@ -73,12 +76,13 @@ that the other side is a Ledger, runs this app, or has any cash counter (see [Ho
   sender supplied. Any NFC phone or script can create a fresh key with no USDC, read `GET_REQUEST`, sign a matching
   auth and send it; the payee then shows "Signed IOU for 5 USDC", marks the request paid and returns a receipt. No
   Ledger is needed. The screen says "IOU ... Not settled yet" for this reason, not "Received".
-- **No offline solvency.** The loaded cash is **only a counter on the payer's device**. Nothing locks the USDC on-chain,
-  so the payee **cannot check offline** that the payer's on-chain balance still covers the authorization. The payer
-  could have spent the USDC from another wallet, or loaded more than they hold. Until settlement the payee carries
-  the credit risk of a signed IOU. True bearer cash needs on-chain escrow (the "load" moves USDC into a contract that
-  only releases it to authorizations from that device key) **and** device attestation (so the payee knows the counter
-  lives in a genuine Ledger secure element running this app). Both are stretch goals, out of scope for v0.
+- **No offline solvency.** The loaded device-capped cash is **only a counter on the payer's device**. Nothing locks the
+  USDC on-chain, so the payee **cannot check offline** that the payer's on-chain balance still covers the authorization.
+  The payer could have spent the USDC from another wallet, or loaded more than they hold. Until settlement the payee
+  carries the credit risk of a signed IOU. True bearer cash (escrowed, not device-capped) needs on-chain escrow (the
+  "load" moves USDC into a contract that only releases it to authorizations from that device key) **and** device
+  attestation (so the payee knows the counter lives in a genuine Ledger secure element running this app). Both are
+  stretch goals, out of scope for v0; see [Cash ladder](#cash-ladder-device-capped-iou-v0-to-escrowed-cash-v2).
 - **The payee's identity is visual.** The payer can only compare the "To" address on its review with the payee's home
   screen. A rogue card shows a review with its own address and any label.
 - `validBefore = 2^64-1`: a request never expires, because the device has no trusted clock.
@@ -96,6 +100,22 @@ that the other side is a Ledger, runs this app, or has any cash counter (see [Ho
 - Emulation only: the Speculos payee runs `--transport NFC`, so `speculos-nfc/seproxyhal.py` adds a USB host link to
   it. The demo sends the payee's host commands with a `USB!` prefix over that link; a real device has USB (or BLE)
   next to NFC anyway.
+
+## Cash ladder: device-capped IOU (v0) to escrowed cash (v2)
+
+"Cash" in this project always means one rung of this ladder; this build is v0, device-capped cash.
+
+| Rung | What the payee holds | What makes it hold | Status |
+|---|---|---|---|
+| **v0: device-capped cash (this build)** | A payer-signed EIP-3009 IOU that settles later | The payer's secure element caps total spending at the loaded balance and debits before the signature leaves the chip. No escrow: the payee cannot check offline that the payer can pay. | Runs end to end in emulation |
+| **v1: attested device-capped cash** | The same IOU, plus proof that it came from the genuine ledger-cash app | BOLOS endorsement signs over the running app's code hash, so a payee can check the IOU came from the capped app, not from any key. Still no escrow. | Speculos-only stretch, not built. Speculos gives every app the same fixed code hash (`src/bolos/endorsement.c:38`), so it shows the mechanism, not the binding; retail provisioning is untested (research/source-audit.md M01) |
+| **v2: escrowed cash** | An attested note redeemable from on-chain escrow | "Load" locks USDC in a contract that releases it only to authorizations from that device key, so the note pays out without trusting the payer | Not built |
+
+Q&A, v0 device-capped cash: "What stops a payer spending the same loaded balance to two payees before either settles?
+In v0 the chip caps the total; it does not escrow." Each payment is debited from the device counter before its
+signature leaves the chip, so the sum of everything the device signs never exceeds what was loaded. The payer's on-chain USDC is not
+locked, so the payer can still move it from another wallet, or load more than they hold, and an IOU can bounce at
+settlement. v2 closes that gap.
 
 ## Protocol
 
@@ -132,7 +152,7 @@ Status words: `9000` ok, `6985` rejected on screen, `6700` wrong length, `6A80` 
 `6A88` no auth in that slot, `6D00` unknown INS or not allowed over NFC, `6E00` wrong CLA.
 - `B001` payee signature invalid
 - `B002` not configured, or wrong chain or token
-- `B003` not enough cash
+- `B003` not enough device-capped cash
 - `B004` already paid
 - `B005` invalid auth (fields, signature, or high-s)
 - `B006` no request (none set, already paid, or dropped)
@@ -199,7 +219,7 @@ python demo.py
    2. Tap 2 is the same tap again: the payee no longer serves the paid request, so the payer shows "Payee has no
       request" (`B006`) and nothing is signed. A USB PAY of the same request gets the payer's own `B004`.
    3. Tap 3: the payee is pulled away during the review, so nothing is paid.
-   4. Tap 4: the payee is pulled away after signing, so the cash is debited and the auth is kept.
+   4. Tap 4: the payee is pulled away after signing, so the device-capped cash is debited and the auth is kept.
 
    Then two payee checks: a high-s copy of tap 4's auth (it still recovers to the payer) is refused with `B005`, and a
    SET_REQUEST rejected on screen drops the pending "tea" request (`GET_REQUEST` -> `B006`). GET_AUTHS on the payee
