@@ -2,7 +2,8 @@
 drive them from a browser.
 
   python live_demo.py up [--base]        start chain + payer Flex + payee Flex, load 20 USDC on the payer
-                                         --base: settle on Base Sepolia (real testnet USDC, testnet-wallets.json, BaseScan links)
+                                         --base / --sepolia: settle on Base Sepolia / Ethereum Sepolia (real testnet USDC,
+                                         testnet-wallets.json, explorer links)
   python live_demo.py request 5 coffee   payee asks for 5 USDC (approve it on the payee screen yourself, or add --auto)
   python live_demo.py tap                bring the two devices together for 60 s (approve on the payer screen yourself, or --auto)
   python live_demo.py status             payer cash, payee IOUs, on-chain balances
@@ -25,12 +26,18 @@ import demo as D
 T = D.T
 STATE = D.HERE / "live_demo.json"
 WALLETS = D.HERE / "testnet-wallets.json"  # gitignored: fresh Base Sepolia seeds + relayer key
-BASE = {"chain": 84532, "token": "0x036CbD53842c5426634e7929541eC2318f3dCF7e", "rpc": "https://sepolia.base.org",
-        "scan": "https://sepolia.basescan.org"}
+NETS = {"base": {"chain": 84532, "token": "0x036CbD53842c5426634e7929541eC2318f3dCF7e", "rpc": "https://sepolia.base.org",
+                 "scan": "https://sepolia.basescan.org"},
+        "sepolia": {"chain": 11155111, "token": "0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238",
+                    "rpc": "https://ethereum-sepolia-rpc.publicnode.com", "scan": "https://sepolia.etherscan.io"}}
+BASE = NETS["base"]  # the testnet in use; use_base() switches it
 
 
-def use_base():
-    """Point everything at Base Sepolia: the payer/payee seeds and relayer key from testnet-wallets.json."""
+def use_base(net="base"):
+    """Point everything at a public testnet (base = Base Sepolia, sepolia = Ethereum Sepolia):
+    the payer/payee seeds and relayer key from testnet-wallets.json."""
+    global BASE
+    BASE = NETS[net]
     w = json.loads(WALLETS.read_text())
     T.SEED_PAYER, T.SEED_PAYEE = w["payer"]["seed"], w["payee"]["seed"]
     T.ADDR_PAYER, T.ADDR_PAYEE, T.CHAIN = w["payer"]["cash_account"], w["payee"]["cash_account"], BASE["chain"]
@@ -51,9 +58,9 @@ def devices():
 
 def up(base=False):
     if base:
-        use_base()
+        use_base(base)
         token = BASE["token"]
-        print(f"Base Sepolia mode: payer cash account {T.ADDR_PAYER}, payee {T.ADDR_PAYEE}")
+        print(f"{base} testnet mode (chain {BASE['chain']}): payer cash account {T.ADDR_PAYER}, payee {T.ADDR_PAYEE}")
         D.node("balances.mjs", T.ADDR_PAYER, T.ADDR_PAYEE)
     else:
         print("starting local chain (anvil) and deploying test USDC ...")
@@ -228,12 +235,13 @@ def serve(port=16099):
 
 if __name__ == "__main__":
     a = sys.argv[1:] or ["status"]
-    auto, base = "--auto" in a, "--base" in a
-    a = [x for x in a if x not in ("--auto", "--base")]
+    auto = "--auto" in a
+    base = "sepolia" if "--sepolia" in a else "base" if "--base" in a else False
+    a = [x for x in a if x not in ("--auto", "--base", "--sepolia")]
     if a[0] != "up" and STATE.exists():
         st = json.loads(STATE.read_text())
         T.TOKEN = bytes.fromhex(st["token"][2:])
         if st.get("base"):
-            use_base()
+            use_base(st["base"] if st["base"] in NETS else "base")
     {"up": lambda: up(base), "status": status, "settle": settle, "down": down, "serve": serve,
      "tap": lambda: tap(auto), "request": lambda: request(a[1], " ".join(a[2:]) or "coffee", auto)}[a[0]]()
