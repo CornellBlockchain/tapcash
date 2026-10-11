@@ -1,30 +1,131 @@
 <!doctype html>
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>TapCash</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap">
 <style>
-  body { font: 16px -apple-system, sans-serif; margin: 24px; }
-  button { font-size: 20px; padding: 14px 24px; }
-  input { font-size: 20px; width: 8em; }
-  pre { white-space: pre-wrap; word-break: break-all; font-size: 13px; }
+  :root { --ink: #0E0E10; --muted: #6B6B70; --soft: #F3F3F1; --line: #E4E4E1; --lime: #C6FF3D; --lime-dark: #7FB800; }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; min-height: 100dvh; display: flex; flex-direction: column; gap: 16px;
+    padding: calc(env(safe-area-inset-top) + 16px) 24px calc(env(safe-area-inset-bottom) + 16px);
+    font-family: Inter, -apple-system, system-ui, sans-serif; color: var(--ink); background: #fff;
+    -webkit-tap-highlight-color: transparent;
+  }
+  button { font-family: inherit; color: inherit; cursor: pointer; }
   header { display: flex; align-items: center; gap: 10px; }
-  header h1 { margin: 0; font-size: 22px; }
+  header b { flex: 1; font-size: 20px; }
+  .pill { background: var(--soft); color: var(--muted); font-size: 12px; font-weight: 500; border-radius: 999px; padding: 5px 10px; }
+  .screen { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 16px; text-align: center; }
+  .screen[hidden] { display: none; }
+  .grow { flex: 1; }
+  h2 { margin: 0; font-size: 28px; font-weight: 600; line-height: 1.2; }
+  p { margin: 0; font-size: 15px; line-height: 1.4; color: var(--muted); }
+  .err { color: #C23B22; min-height: 1.4em; }
+  .chip { align-self: stretch; display: flex; align-items: center; gap: 12px; background: var(--soft); border-radius: 16px; padding: 14px 16px; text-align: left; }
+  .chip::before { content: ""; flex: none; width: 10px; height: 10px; border-radius: 50%; background: var(--lime-dark); }
+  .chip small { display: block; font-size: 13px; font-weight: 500; color: var(--muted); }
+  .chip strong { font-size: 17px; font-weight: 600; }
+  .amount { font-size: 72px; font-weight: 700; letter-spacing: -1px; }
+  .amount span { margin-left: 8px; font-size: 22px; font-weight: 600; letter-spacing: 0; color: var(--muted); }
+  .keypad { align-self: stretch; display: grid; grid-template-columns: repeat(3, 1fr); }
+  .keypad button { background: none; border: 0; padding: 14px 0; font-size: 26px; font-weight: 500; }
+  .btn { align-self: stretch; height: 56px; border-radius: 999px; border: 2px solid var(--ink); background: var(--ink); color: #fff; font-size: 17px; font-weight: 600; }
+  .btn.secondary { background: #fff; color: var(--ink); }
+  .btn:disabled { opacity: .3; }
+  .halo { display: flex; padding: 24px; border-radius: 50%; background: rgb(198 255 61 / .25); }
+  .steps { display: flex; gap: 6px; }
+  .steps i { width: 28px; height: 4px; border-radius: 2px; background: var(--line); }
+  .steps i.on { background: var(--ink); }
+  .flex { width: 190px; height: 250px; display: flex; flex-direction: column; justify-content: center; gap: 10px; padding: 18px; border: 6px solid var(--ink); border-radius: 28px; }
+  .flex b { font-size: 15px; }
+  .flex small { font-size: 11px; color: var(--muted); white-space: pre-line; }
+  .flex .approve { background: var(--ink); color: #fff; border-radius: 999px; padding: 9px; font-size: 12px; font-weight: 600; }
+  .flex .reject { font-size: 11px; font-weight: 600; }
+  .addr { align-self: stretch; display: flex; align-items: center; gap: 12px; background: var(--soft); border-radius: 16px; padding: 16px; text-align: left; font-size: 14px; font-weight: 500; word-break: break-all; }
+  .addr button { background: none; border: 0; color: var(--lime-dark); font-size: 15px; font-weight: 600; }
+  .big { margin: 0; font-size: 44px; font-weight: 700; color: var(--ink); }
+  a { color: var(--ink); font-size: 15px; font-weight: 600; }
 </style>
-<header><svg viewBox="0 0 512 512" width="32" height="32" aria-hidden="true"><rect width="512" height="512" rx="112" fill="#0E0E10"/><g transform="rotate(-12 256 256)" fill="none" stroke-width="26" stroke-linecap="round"><rect x="176" y="136" width="160" height="240" rx="30" stroke="#fff"/><rect x="204" y="292" width="104" height="56" rx="12" stroke="#fff" stroke-width="20"/><path d="M319 99A66 66 0 0 1 373 153M341 61A108 108 0 0 1 411 131M193 413A66 66 0 0 1 139 359M171 451A108 108 0 0 1 101 381" stroke="#C6FF3D"/></g></svg><h1>TapCash</h1></header>
-<p>Receive <input id="amount" type="number" inputmode="decimal" value="1" min="0.000001" step="any"> USDC</p>
-<p><button id="go">Tap Ledger</button></p>
-<pre id="wallet"></pre>
-<pre id="log"></pre>
+
+<header>
+  <svg viewBox="0 0 512 512" width="32" height="32" aria-hidden="true"><rect width="512" height="512" rx="112" fill="#0E0E10"/><g transform="rotate(-12 256 256)" fill="none" stroke-width="26" stroke-linecap="round"><rect x="176" y="136" width="160" height="240" rx="30" stroke="#fff"/><rect x="204" y="292" width="104" height="56" rx="12" stroke="#fff" stroke-width="20"/><path d="M319 99A66 66 0 0 1 373 153M341 61A108 108 0 0 1 411 131M193 413A66 66 0 0 1 139 359M171 451A108 108 0 0 1 101 381" stroke="#C6FF3D"/></g></svg>
+  <b>TapCash</b>
+  <span class="pill">Base Sepolia</span>
+</header>
+
+<section id="setup" class="screen" hidden>
+  <div class="grow"></div>
+  <div id="setupArt"></div>
+  <h2>Add a little gas<br>to start receiving</h2>
+  <p>Your iPhone wallet pays the network fee, so the payer doesn't need any ETH. Send ~0.001 Base Sepolia ETH to:</p>
+  <div class="addr"><span class="grow" id="address"></span><button id="copy">Copy</button></div>
+  <p class="err" id="setupErr"></p>
+  <div class="grow"></div>
+  <button class="btn" id="gasAdded">I've added gas</button>
+</section>
+
+<section id="receive" class="screen" hidden>
+  <div class="chip"><div><small id="walletLine">iPhone wallet</small><strong class="usdc">… USDC</strong></div></div>
+  <div class="grow"></div>
+  <p>Request</p>
+  <div class="amount"><output id="amount">0</output><span>USDC</span></div>
+  <div class="grow"></div>
+  <div class="keypad" id="keypad">
+    <button>1</button><button>2</button><button>3</button>
+    <button>4</button><button>5</button><button>6</button>
+    <button>7</button><button>8</button><button>9</button>
+    <button>.</button><button>0</button><button aria-label="Delete">⌫</button>
+  </div>
+  <button class="btn" id="tap" disabled>Tap Ledger</button>
+</section>
+
+<section id="hold" class="screen" hidden>
+  <div class="grow"></div>
+  <div class="halo" id="holdArt"></div>
+  <h2>Hold your iPhone<br>near the Ledger</h2>
+  <p id="holdText"></p>
+  <div class="steps"><i class="on"></i><i id="step2"></i></div>
+  <div class="grow"></div>
+  <button class="btn secondary" id="cancel">Cancel</button>
+</section>
+
+<section id="approve" class="screen" hidden>
+  <div class="grow"></div>
+  <div class="flex"><b>Send payment?</b><small id="flexText"></small><div class="approve">Approve</div><div class="reject">Reject</div></div>
+  <h2>Approve on your Ledger</h2>
+  <p>Check the amount and address on the Flex screen, then tap your iPhone again.</p>
+  <div class="steps"><i class="on"></i><i class="on"></i></div>
+  <p class="err" id="approveErr"></p>
+  <div class="grow"></div>
+  <button class="btn" id="tapAgain">Tap again</button>
+</section>
+
+<section id="done" class="screen" hidden>
+  <div class="grow"></div>
+  <svg width="120" height="120" viewBox="0 0 120 120" aria-hidden="true"><circle cx="60" cy="60" r="60" fill="#C6FF3D"/><path d="M36 61 L53 78 L85 44" fill="none" stroke="#0E0E10" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/></svg>
+  <p class="big" id="doneAmount"></p>
+  <p id="doneFrom"></p>
+  <a id="basescan" target="_blank" rel="noopener">View on Basescan ↗</a>
+  <div class="grow"></div>
+  <div class="chip"><div><small>iPhone wallet balance</small><strong class="usdc"></strong></div></div>
+  <button class="btn" id="newRequest">New request</button>
+</section>
+
 <script type="module">
 // The iPhone is the receiver's wallet: a burner key in localStorage that also pays gas.
-// WebAuthn is the NFC transport: press, tap, approve on the Flex, press, tap again.
-import { createPublicClient, createWalletClient, http, parseUnits, formatUnits, formatEther,
+// WebAuthn is the NFC transport: tap (request), approve on the Flex, tap again (signature).
+import { createPublicClient, createWalletClient, http, parseUnits, formatUnits,
          recoverTypedDataAddress, serializeSignature, toHex } from 'https://esm.sh/viem@2.57.4';
 import { privateKeyToAccount, generatePrivateKey } from 'https://esm.sh/viem@2.57.4/accounts';
 import { baseSepolia } from 'https://esm.sh/viem@2.57.4/chains';
 import { USDC, DOMAIN, TYPES, buildRequest, parseRequest, parseResponse } from './tapcash.js';
 
 const $ = id => document.getElementById(id);
-const log = s => $('log').textContent += s + '\n';
+const show = id => document.querySelectorAll('.screen').forEach(s => (s.hidden = s.id !== id));
+const short = a => a.slice(0, 6) + '…' + a.slice(-4);
 const ABI = [
   { name: 'balanceOf', type: 'function', stateMutability: 'view', inputs: [{ type: 'address' }], outputs: [{ type: 'uint256' }] },
   { name: 'transferWithAuthorization', type: 'function', stateMutability: 'nonpayable', outputs: [], inputs: [
@@ -33,58 +134,108 @@ const ABI = [
     { name: 'v', type: 'uint8' }, { name: 'r', type: 'bytes32' }, { name: 's', type: 'bytes32' }] },
 ];
 
+// Illustration (device with vibration marks at all four corners)
+const arc = (cx, cy, r, a0, a1) => {
+  const p = a => [cx + r * Math.cos(a * Math.PI / 180), cy + r * Math.sin(a * Math.PI / 180)].map(n => n.toFixed(1));
+  return `M${p(a0)} A${r} ${r} 0 0 1 ${p(a1)}`;
+};
+const art = (size, fg, ac, bg) => `<svg width="${size}" height="${size}" viewBox="0 0 512 512" aria-hidden="true">` +
+  (bg ? `<rect width="512" height="512" rx="112" fill="${bg}"/>` : '') +
+  `<g fill="none" stroke-width="14" stroke-linecap="round"><rect x="176" y="136" width="160" height="240" rx="28" stroke="${fg}"/>` +
+  `<rect x="194" y="296" width="124" height="62" rx="14" stroke="${fg}" stroke-width="12"/><path stroke="${ac}" d="` +
+  [[204, 164, 195, 255], [308, 164, 285, 345], [308, 348, 15, 75], [204, 348, 105, 165]]
+    .map(([cx, cy, a0, a1]) => arc(cx, cy, 58, a0, a1) + arc(cx, cy, 88, a0 + 8, a1 - 8)).join('') + `"/></g></svg>`;
+$('holdArt').innerHTML = art(200, '#0E0E10', '#7FB800');
+$('setupArt').innerHTML = art(120, '#fff', '#C6FF3D', '#0E0E10');
+
 localStorage.tcKey ??= generatePrivateKey();
 const account = privateKeyToAccount(localStorage.tcKey);
 const pub = createPublicClient({ chain: baseSepolia, transport: http() });
 const wallet = createWalletClient({ account, chain: baseSepolia, transport: http() });
+$('address').textContent = account.address;
+$('walletLine').textContent = 'iPhone wallet  ' + short(account.address);
 
-async function showWallet() {
+async function refresh() {
   const [eth, usdc] = await Promise.all([
     pub.getBalance({ address: account.address }),
     pub.readContract({ address: USDC, abi: ABI, functionName: 'balanceOf', args: [account.address] }),
   ]);
-  $('wallet').textContent = `iPhone wallet ${account.address}\n${formatUnits(usdc, 6)} USDC · ${formatEther(eth)} ETH (gas)`
-    + (eth === 0n ? '\n⚠ needs a little Base Sepolia ETH to pay gas' : '');
+  document.querySelectorAll('.usdc').forEach(e => (e.textContent = formatUnits(usdc, 6) + ' USDC'));
+  return eth;
 }
-showWallet();
+refresh().then(eth => show(eth === 0n ? 'setup' : 'receive'));
 
-let pending = null;  // same key handle for both taps
-$('go').onclick = async () => {
-  const value = parseUnits($('amount').value, 6);
+$('copy').onclick = async () => { await navigator.clipboard.writeText(account.address); $('copy').textContent = 'Copied'; };
+$('gasAdded').onclick = async () => {
+  if ((await refresh()) > 0n) return show('receive');
+  $('setupErr').textContent = 'No ETH yet. It can take a few seconds to arrive.';
+};
+
+// Keypad: up to 6 decimals (USDC)
+let amount = '0';
+$('keypad').onclick = e => {
+  const k = e.target.closest('button')?.textContent;
+  if (!k) return;
+  if (k === '⌫') amount = amount.slice(0, -1) || '0';
+  else if (k === '.') amount += amount.includes('.') ? '' : '.';
+  else if (!(amount.split('.')[1]?.length >= 6)) amount = amount === '0' ? k : amount + k;
+  $('amount').textContent = amount;
+  $('tap').disabled = !(Number(amount) > 0);
+};
+
+let pending = null, abort = null;  // same key handle for both taps
+async function tap(step) {
+  const value = parseUnits(amount, 6);
   if (!pending || pending.value !== value) {
     const nonce = toHex(crypto.getRandomValues(new Uint8Array(32)));
-    const validBefore = Math.floor(Date.now() / 1000) + 3600;
-    pending = { value, kh: buildRequest(account.address, value, validBefore, nonce) };
-    log(`>> request ${formatUnits(value, 6)} USDC`);
+    pending = { value, kh: buildRequest(account.address, value, Math.floor(Date.now() / 1000) + 3600, nonce) };
   }
+  $('holdText').textContent = step === 1 ? `Requesting ${amount} USDC · open TapCash on the Flex` : 'Collecting the signature from your Flex';
+  $('step2').classList.toggle('on', step === 2);
+  $('cancel').hidden = false;
+  show('hold');
+
   let cred;
+  abort = new AbortController();
   try {
-    cred = await navigator.credentials.get({ publicKey: {
+    cred = await navigator.credentials.get({ signal: abort.signal, publicKey: {
       challenge: crypto.getRandomValues(new Uint8Array(32)),
       allowCredentials: [{ type: 'public-key', id: pending.kh, transports: ['nfc'] }],
       userVerification: 'discouraged',
       timeout: 60000,
     }});
   } catch (e) {
-    return log(`-- ${e.name} (first tap? approve on the Flex, then press again)`);
+    if (e.name === 'AbortError') return show('receive');
+    $('flexText').textContent = `${amount} USDC on Base Sepolia\nto ${short(account.address)}`;
+    $('approveErr').textContent = step === 2 ? 'Not approved yet. Approve on the Flex, then tap again.' : '';
+    return show('approve');
   }
+
+  $('holdText').textContent = 'Sending on Base Sepolia…';
+  $('cancel').hidden = true;
   try {
     const req = parseRequest(pending.kh);
     const { from, v, r, s } = parseResponse(cred.response.authenticatorData, cred.response.signature);
     const signer = await recoverTypedDataAddress({ domain: DOMAIN, types: TYPES, primaryType: 'TransferWithAuthorization',
       message: { from, ...req, validAfter: 0n }, signature: serializeSignature({ r, s, v: BigInt(v) }) });
-    if (signer.toLowerCase() !== from.toLowerCase()) throw new Error(`signature check failed: ${signer} != ${from}`);
-    log(`<< signed by Flex ${from}`);
+    if (signer.toLowerCase() !== from.toLowerCase()) throw new Error(`Signature check failed: ${signer} != ${from}`);
     const args = [from, req.to, req.value, 0n, req.validBefore, req.nonce, v, r, s];
     const { request } = await pub.simulateContract({ account, address: USDC, abi: ABI, functionName: 'transferWithAuthorization', args });
     const hash = await wallet.writeContract(request);
-    log(`.. sent https://sepolia.basescan.org/tx/${hash}`);
     await pub.waitForTransactionReceipt({ hash });
-    log('✓ received');
+    $('doneAmount').textContent = `+${formatUnits(req.value, 6)} USDC`;
+    $('doneFrom').textContent = 'Received from ' + short(from);
+    $('basescan').href = `https://sepolia.basescan.org/tx/${hash}`;
     pending = null;
-    showWallet();
+    await refresh();
+    show('done');
   } catch (e) {
-    log('!! ' + (e.shortMessage || e.message));
+    $('approveErr').textContent = e.shortMessage || e.message;
+    show('approve');
   }
-};
+}
+$('tap').onclick = () => tap(1);
+$('tapAgain').onclick = () => tap(2);
+$('cancel').onclick = () => abort?.abort();
+$('newRequest').onclick = () => { amount = '0'; $('amount').textContent = '0'; $('tap').disabled = true; show('receive'); };
 </script>
