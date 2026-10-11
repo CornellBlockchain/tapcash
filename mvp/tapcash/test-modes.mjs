@@ -1,5 +1,5 @@
-// Card mode and pocket mode on Speculos. Card mode: the next payment, any amount, signs on the
-// first tap, then turns off. Pocket mode: payments within the Settings limits sign on the first tap.
+// Card mode and budget mode on Speculos. Card mode: the next payment, any amount, signs on the
+// first tap, then turns off. Budget mode: payments within the Settings limits sign on the first tap.
 // Start Speculos as in test.mjs (fresh, on the home screen), then
 //   node test-modes.mjs
 import assert from 'node:assert/strict';
@@ -74,9 +74,9 @@ await press('Turn off card mode');
 await sleep(2500);
 await assertReview(3);
 
-// Pocket mode: a switch on the first settings page; home is current after going back
+// Budget mode: a switch on the first settings page; home is current after going back
 await touch(403, 75);
-assert.match(await screen(), /Pocket mode/);
+assert.match(await screen(), /Budget mode/);
 await touch(420, 142);  // switch on
 await touch(50, 48);    // back home
 assert.match(await home(), /20 USDC left,for 10 more payments/);
@@ -84,14 +84,14 @@ await assertReview(6);  // over the 5 USDC default
 await payOneTap(5);
 assert.match(await home(), /15 USDC left,for 9 more payments/);
 
-// Card mode wins while armed and doesn't spend the pocket
+// Card mode wins while armed and doesn't spend the budget
 await press('Turn on card mode');
 await press('Turn on');
 await sleep(2500);
 await payOneTap(50);
 assert.match(await home(), /15 USDC left,for 9 more payments/);
 
-// Limits in settings: total and count restart a running pocket
+// Limits in settings: total and count restart a running budget
 await touch(403, 75);
 await touch(430, 552);  // per tap
 await press('1 USDC per tap');
@@ -104,9 +104,9 @@ await touch(50, 48);
 assert.match(await home(), /100 USDC left,for 1 more payment(?!s)/);
 await assertReview(2);  // over the new 1 USDC cap
 await payOneTap(1);
-assert.match(await home(), /Hold your iPhone/);  // the only payment used: pocket off
+assert.match(await home(), /Hold your iPhone/);  // the only payment used: budget mode off
 
-// Switching pocket mode off in settings
+// Switching budget mode off in settings
 await touch(403, 75);
 await touch(420, 142);  // on
 await touch(420, 142);  // off
@@ -123,4 +123,4 @@ assert.match(await screen(), /Card mode timed out/);
 await sleep(3500);
 assert.match(await home(), /Turn on card mode/);
 await assertReview(4);
-console.log('ok card + pocket', flex);
+console.log('ok card + budget', flex);

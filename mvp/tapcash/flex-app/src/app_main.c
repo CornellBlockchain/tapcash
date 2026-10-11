@@ -59,7 +59,7 @@ static char review_text[80];
 static uint8_t response[1 + 4 + 72 + 20];
 static size_t response_len;
 
-// Pocket mode: after one approval on the Flex, payments up to the per-tap cap are signed on the
+// Budget mode: after one approval on the Flex, payments up to the per-tap cap are signed on the
 // first tap, without review, until the total or the number of payments is used up, or the app
 // closes (RAM only). All three limits are picked in Settings; defaults 5 USDC per tap,
 // 20 USDC in total, 10 payments.
@@ -70,10 +70,10 @@ static const uint32_t PER_TAP_CAPS[NB_CAPS] = {1, 5, 10, 50};   // USDC
 static const uint32_t TOTAL_CAPS[NB_CAPS] = {10, 20, 100, 500};  // USDC
 static const uint32_t COUNT_CAPS[NB_CAPS] = {1, 5, 10, 25};       // payments
 static uint8_t per_tap_idx, total_idx, count_idx;  // set in app_main: apps can't have initialized .data
-static uint64_t pocket_left;          // 0 = off
-static uint32_t pocket_taps_left;
-static uint8_t pocket_paid[REQ_LEN];  // last one-tap (pocket or card) payment, so a retried tap gets the same reply
-static bool pocket_paid_valid;        // false until a one-tap payment, and once `response` changes
+static uint64_t budget_left;          // 0 = off
+static uint32_t budget_taps_left;
+static uint8_t budget_paid[REQ_LEN];  // last one-tap (budget or card) payment, so a retried tap gets the same reply
+static bool budget_paid_valid;        // false until a one-tap payment, and once `response` changes
 
 // Card mode: turned on right before paying, it lets the next payment be signed on the first tap,
 // without review and with no amount limit, like a card the merchant's terminal (the iPhone) charges.
@@ -95,7 +95,7 @@ static void format_usdc(char *out, size_t len, uint64_t micro) {
 static void card_toggle(void);
 static void settings_changed(int token, uint8_t index, int page);
 
-enum { POCKET_TOKEN = FIRST_USER_TOKEN, PER_TAP_TOKEN, TOTAL_TOKEN, COUNT_TOKEN };
+enum { BUDGET_TOKEN = FIRST_USER_TOKEN, PER_TAP_TOKEN, TOTAL_TOKEN, COUNT_TOKEN };
 
 // Home and settings screens. All filled at runtime (apps can't have initialized .data). The SDK
 // keeps pointers to these, so updating them in place shows the change when the user goes back
@@ -103,24 +103,24 @@ enum { POCKET_TOKEN = FIRST_USER_TOKEN, PER_TAP_TOKEN, TOTAL_TOKEN, COUNT_TOKEN 
 static nbgl_homeAction_t home_action;
 static char per_tap_text[NB_CAPS][24], total_text[NB_CAPS][24], count_text[NB_CAPS][24];
 static const char *per_tap_names[NB_CAPS], *total_names[NB_CAPS], *count_names[NB_CAPS];
-static nbgl_contentSwitch_t pocket_switch;
+static nbgl_contentSwitch_t budget_switch;
 static nbgl_content_t settings_contents[4];
 static nbgl_genericContents_t settings;
 
 static void ui_update(void) {
-    pocket_switch.initState = pocket_left ? ON_STATE : OFF_STATE;
+    budget_switch.initState = budget_left ? ON_STATE : OFF_STATE;
     settings_contents[1].content.choicesList.initChoice = per_tap_idx;
     settings_contents[2].content.choicesList.initChoice = total_idx;
     settings_contents[3].content.choicesList.initChoice = count_idx;
     if (card_mode) {
         snprintf(home_text, sizeof(home_text), "Card mode is on for 1 minute:\nthe next tap pays");
-    } else if (pocket_left) {
+    } else if (budget_left) {
         char left[24];
-        format_usdc(left, sizeof(left), pocket_left);
-        snprintf(home_text, sizeof(home_text), "Pocket mode: %s USDC left\nfor %u more payment%s",
-                 left, (unsigned) pocket_taps_left, pocket_taps_left == 1 ? "" : "s");
+        format_usdc(left, sizeof(left), budget_left);
+        snprintf(home_text, sizeof(home_text), "Budget mode: %s USDC left\nfor %u more payment%s",
+                 left, (unsigned) budget_taps_left, budget_taps_left == 1 ? "" : "s");
     } else {
-        snprintf(home_text, sizeof(home_text), "Hold your iPhone\nnear the screen");
+        snprintf(home_text, sizeof(home_text), "Manual mode: two taps\nHold your iPhone\nnear the screen");
     }
     home_action.text = card_mode ? "Turn off card mode" : "Turn on card mode";
 }
@@ -135,14 +135,14 @@ static void ui_home(void) {
         total_names[i] = total_text[i];
         count_names[i] = count_text[i];
     }
-    memset(&pocket_switch, 0, sizeof(pocket_switch));
-    pocket_switch.text = "Pocket mode";
-    pocket_switch.subText = "One-tap payments within the limits on the next pages";
-    pocket_switch.token = POCKET_TOKEN;
-    pocket_switch.tuneId = NBGL_NO_TUNE;
+    memset(&budget_switch, 0, sizeof(budget_switch));
+    budget_switch.text = "Budget mode";
+    budget_switch.subText = "One tap within the limits on the next pages. Off: manual mode.";
+    budget_switch.token = BUDGET_TOKEN;
+    budget_switch.tuneId = NBGL_NO_TUNE;
     memset(settings_contents, 0, sizeof(settings_contents));
     settings_contents[0].type = SWITCHES_LIST;
-    settings_contents[0].content.switchesList.switches = &pocket_switch;
+    settings_contents[0].content.switchesList.switches = &budget_switch;
     settings_contents[0].content.switchesList.nbSwitches = 1;
     settings_contents[0].contentActionCallback = settings_changed;
     settings_contents[1].type = CHOICES_LIST;
@@ -173,16 +173,16 @@ static void ui_home(void) {
                                 app_quit);
 }
 
-// The pocket switch starts or stops pocket mode. A new total or count restarts that part of a
-// running pocket.
+// The budget mode switch starts or stops budget mode. A new total or count restarts that part of a
+// running budget.
 static void settings_changed(int token, uint8_t index, int page) {
     (void) page;
-    if (token == POCKET_TOKEN) {
+    if (token == BUDGET_TOKEN) {
         if (index == ON_STATE) {
-            pocket_left = USDC(TOTAL_CAPS[total_idx]);
-            pocket_taps_left = COUNT_CAPS[count_idx];
+            budget_left = USDC(TOTAL_CAPS[total_idx]);
+            budget_taps_left = COUNT_CAPS[count_idx];
         } else {
-            pocket_left = 0;
+            budget_left = 0;
         }
     } else if (index >= NB_CAPS) {
         return;
@@ -190,13 +190,13 @@ static void settings_changed(int token, uint8_t index, int page) {
         per_tap_idx = index;
     } else if (token == TOTAL_TOKEN) {
         total_idx = index;
-        if (pocket_left) {
-            pocket_left = USDC(TOTAL_CAPS[total_idx]);
+        if (budget_left) {
+            budget_left = USDC(TOTAL_CAPS[total_idx]);
         }
     } else if (token == COUNT_TOKEN) {
         count_idx = index;
-        if (pocket_left) {
-            pocket_taps_left = COUNT_CAPS[count_idx];
+        if (budget_left) {
+            budget_taps_left = COUNT_CAPS[count_idx];
         }
     }
     ui_update();
@@ -265,7 +265,7 @@ static size_t der_int(uint8_t *out, const uint8_t v[32]) {
 static bool sign_request(void) {
     uint8_t from[20], buf[7 * 32], digest[32], r[32], s[32];
     uint32_t info = 0;
-    pocket_paid_valid = false;  // `response` is about to change
+    budget_paid_valid = false;  // `response` is about to change
     if (!get_address(from)) {
         return false;
     }
@@ -404,16 +404,16 @@ static void handle_u2f_sign(uint8_t p1, const uint8_t *data, int lc) {
         return;
     }
 
-    // Checked first: the payment may have turned card or pocket mode off
-    if (pocket_paid_valid && memcmp(kh, pocket_paid, REQ_LEN) == 0) {  // iOS retried a tap we already paid
+    // Checked first: the payment may have turned card or budget mode off
+    if (budget_paid_valid && memcmp(kh, budget_paid, REQ_LEN) == 0) {  // iOS retried a tap we already paid
         io_send_response_pointer(response, response_len, SW_OK);
         return;
     }
 
-    // Card mode, then pocket mode: signed on this tap, without review. Not while a review is open.
-    if ((card_mode || pocket_left) && state != REVIEW) {
+    // Card mode, then budget mode: signed on this tap, without review. Not while a review is open.
+    if ((card_mode || budget_left) && state != REVIEW) {
         uint64_t value = read_u64_be(kh, 20);
-        if (card_mode || (value <= USDC(PER_TAP_CAPS[per_tap_idx]) && value <= pocket_left)) {
+        if (card_mode || (value <= USDC(PER_TAP_CAPS[per_tap_idx]) && value <= budget_left)) {
             memcpy(request, kh, REQ_LEN);
             if (!sign_request()) {
                 io_send_sw(SW_CRYPTO);
@@ -421,15 +421,15 @@ static void handle_u2f_sign(uint8_t p1, const uint8_t *data, int lc) {
             }
             state = IDLE;  // an approved but uncollected review is dropped: its response was overwritten
             if (card_mode) {
-                card_mode = false;  // one payment only; doesn't count against the pocket
+                card_mode = false;  // one payment only; doesn't count against the budget
             } else {
-                pocket_left -= value;
-                if (--pocket_taps_left == 0) {
-                    pocket_left = 0;  // all payments used: pocket mode off
+                budget_left -= value;
+                if (--budget_taps_left == 0) {
+                    budget_left = 0;  // all payments used: budget mode off
                 }
             }
-            memcpy(pocket_paid, kh, REQ_LEN);
-            pocket_paid_valid = true;
+            memcpy(budget_paid, kh, REQ_LEN);
+            budget_paid_valid = true;
             io_send_response_pointer(response, response_len, SW_OK);
             char amount[24];
             format_usdc(amount, sizeof(amount), value);
