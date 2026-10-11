@@ -49,9 +49,13 @@ Before the first payment:
 
 Pocket mode is optional, and off by default. With it off, every payment takes the usual two taps with a review on the Flex.
 - On the Flex home screen, touch "Turn on pocket mode" and confirm once.
-- After that, any payment of 5 USDC or less is signed on the first tap, with no review. The second tap isn't needed, and the page needs no change.
-- Pocket mode stops at 20 USDC in total, or when the app closes, since the budget lives only in the app's memory.
-- Bigger payments, or payments past the budget, fall back to the two-tap review.
+- After that, payments up to the per-payment limit are signed on the first tap, with no review. The second tap isn't needed, and the page needs no change.
+- Pocket mode stops when the total budget or the number of payments is used up, or when the app closes, since it lives only in the app's memory.
+- Settings (the gear on the home screen) sets all three limits:
+  - per payment: 1, 5, 10 or 50 USDC (default 5);
+  - total: 10, 20, 100 or 500 USDC (default 20);
+  - number of payments: 1, 5, 10 or 25 (default 10).
+- Bigger payments, or payments past a limit, fall back to the two-tap review.
 - The home screen shows what's left, and "Turn off pocket mode" ends it at once.
 - The risk is like a contactless card's no-PIN limit: someone who taps your open, unlocked Flex can take at most what's left of the budget.
 - `node test-pocket.mjs` checks it on Speculos, starting from a fresh home screen.

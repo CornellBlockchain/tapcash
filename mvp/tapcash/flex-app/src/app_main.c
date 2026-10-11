@@ -59,12 +59,19 @@ static char review_text[80];
 static uint8_t response[1 + 4 + 72 + 20];
 static size_t response_len;
 
-// Pocket mode: after one approval on the Flex, payments up to POCKET_PER_TAP are signed on the
-// first tap, without review, until POCKET_TOTAL is spent or the app closes (RAM only).
-// ponytail: fixed caps and no time limit (no clock on the Flex); add a settings page if caps should vary.
-#define POCKET_PER_TAP 5000000   // micro-USDC: 5 USDC
-#define POCKET_TOTAL   20000000  // 20 USDC
+// Pocket mode: after one approval on the Flex, payments up to the per-tap cap are signed on the
+// first tap, without review, until the total or the number of payments is used up, or the app
+// closes (RAM only). All three limits are picked in Settings; defaults 5 USDC per tap,
+// 20 USDC in total, 10 payments.
+// ponytail: preset caps and no time limit (no clock on the Flex); a number keyboard if presets aren't enough.
+#define USDC(n) ((uint64_t) (n) * 1000000)
+#define NB_CAPS 4  // one settings page each
+static const uint32_t PER_TAP_CAPS[NB_CAPS] = {1, 5, 10, 50};   // USDC
+static const uint32_t TOTAL_CAPS[NB_CAPS] = {10, 20, 100, 500};  // USDC
+static const uint32_t COUNT_CAPS[NB_CAPS] = {1, 5, 10, 25};       // payments
+static uint8_t per_tap_idx, total_idx, count_idx;  // set in app_main: apps can't have initialized .data
 static uint64_t pocket_left;          // 0 = off
+static uint32_t pocket_taps_left;
 static uint8_t pocket_paid[REQ_LEN];  // last pocket payment, so a retried tap gets the same reply
 static bool pocket_paid_valid;        // false until a pocket payment, and once `response` changes
 static char home_text[80];
@@ -79,15 +86,53 @@ static void format_usdc(char *out, size_t len, uint64_t micro) {
 }
 
 static void pocket_toggle(void);
+static void settings_changed(int token, uint8_t index, int page);
+
+enum { PER_TAP_TOKEN = FIRST_USER_TOKEN, TOTAL_TOKEN, COUNT_TOKEN };
 
 static void ui_home(void) {
-    static nbgl_homeAction_t action;  // filled at runtime: apps can't have initialized .data
+    // All filled at runtime: apps can't have initialized .data
+    static nbgl_homeAction_t action;
+    static char per_tap_text[NB_CAPS][24], total_text[NB_CAPS][24], count_text[NB_CAPS][24];
+    static const char *per_tap_names[NB_CAPS], *total_names[NB_CAPS], *count_names[NB_CAPS];
+    static nbgl_content_t contents[3];
+    static nbgl_genericContents_t settings;
+    for (int i = 0; i < NB_CAPS; i++) {
+        snprintf(per_tap_text[i], sizeof(per_tap_text[i]), "%u USDC per tap", (unsigned) PER_TAP_CAPS[i]);
+        snprintf(total_text[i], sizeof(total_text[i]), "%u USDC in total", (unsigned) TOTAL_CAPS[i]);
+        snprintf(count_text[i], sizeof(count_text[i]), "%u payment%s", (unsigned) COUNT_CAPS[i],
+                 COUNT_CAPS[i] == 1 ? "" : "s");
+        per_tap_names[i] = per_tap_text[i];
+        total_names[i] = total_text[i];
+        count_names[i] = count_text[i];
+    }
+    memset(contents, 0, sizeof(contents));
+    contents[0].type = CHOICES_LIST;
+    contents[0].content.choicesList.names = per_tap_names;
+    contents[0].content.choicesList.nbChoices = NB_CAPS;
+    contents[0].content.choicesList.initChoice = per_tap_idx;
+    contents[0].content.choicesList.token = PER_TAP_TOKEN;
+    contents[0].content.choicesList.tuneId = NBGL_NO_TUNE;
+    contents[0].contentActionCallback = settings_changed;
+    contents[1] = contents[0];
+    contents[1].content.choicesList.names = total_names;
+    contents[1].content.choicesList.initChoice = total_idx;
+    contents[1].content.choicesList.token = TOTAL_TOKEN;
+    contents[2] = contents[0];
+    contents[2].content.choicesList.names = count_names;
+    contents[2].content.choicesList.initChoice = count_idx;
+    contents[2].content.choicesList.token = COUNT_TOKEN;
+    settings.callbackCallNeeded = false;
+    settings.contentsList = contents;
+    settings.nbContents = 3;
+
     action.callback = pocket_toggle;
     action.style = SOFT_HOME_ACTION;
     if (pocket_left) {
         char left[24];
         format_usdc(left, sizeof(left), pocket_left);
-        snprintf(home_text, sizeof(home_text), "Pocket mode: %s USDC left\nHold your iPhone\nnear the screen", left);
+        snprintf(home_text, sizeof(home_text), "Pocket mode: %s USDC left\nfor %u more payment%s",
+                 left, (unsigned) pocket_taps_left, pocket_taps_left == 1 ? "" : "s");
         action.text = "Turn off pocket mode";
     } else {
         snprintf(home_text, sizeof(home_text), "Hold your iPhone\nnear the screen");
@@ -97,10 +142,31 @@ static void ui_home(void) {
                                 &C_tapcash_64px,
                                 home_text,
                                 INIT_HOME_PAGE,
-                                NULL,
+                                &settings,
                                 NULL,
                                 &action,
                                 app_quit);
+}
+
+// A new total or count restarts that part of a running pocket.
+static void settings_changed(int token, uint8_t index, int page) {
+    (void) page;
+    if (index >= NB_CAPS) {
+        return;
+    }
+    if (token == PER_TAP_TOKEN) {
+        per_tap_idx = index;
+    } else if (token == TOTAL_TOKEN) {
+        total_idx = index;
+        if (pocket_left) {
+            pocket_left = USDC(TOTAL_CAPS[total_idx]);
+        }
+    } else if (token == COUNT_TOKEN) {
+        count_idx = index;
+        if (pocket_left) {
+            pocket_taps_left = COUNT_CAPS[count_idx];
+        }
+    }
 }
 
 static void pocket_choice(bool confirm) {
@@ -108,23 +174,25 @@ static void pocket_choice(bool confirm) {
         ui_home();
         return;
     }
-    pocket_left = POCKET_TOTAL;
+    pocket_left = USDC(TOTAL_CAPS[total_idx]);
+    pocket_taps_left = COUNT_CAPS[count_idx];
     nbgl_useCaseStatus("Pocket mode on", true, ui_home);
 }
 
 static void pocket_toggle(void) {
+    static char text[200];
     if (pocket_left) {
         pocket_left = 0;
         nbgl_useCaseStatus("Pocket mode off", true, ui_home);
         return;
     }
-    nbgl_useCaseChoice(&C_tapcash_64px,
-                       "Turn on pocket mode?",
-                       "Payments up to 5 USDC go out on the first tap, without review. "
-                       "20 USDC in total, until you close the app.",
-                       "Turn on",
-                       "Cancel",
-                       pocket_choice);
+    snprintf(text, sizeof(text),
+             "Up to %u payment%s of at most %u USDC each go out on the first tap, without review. "
+             "%u USDC in total, until you close the app. Change limits in Settings.",
+             (unsigned) COUNT_CAPS[count_idx], COUNT_CAPS[count_idx] == 1 ? "" : "s",
+             (unsigned) PER_TAP_CAPS[per_tap_idx],
+             (unsigned) TOTAL_CAPS[total_idx]);
+    nbgl_useCaseChoice(&C_tapcash_64px, "Turn on pocket mode?", text, "Turn on", "Cancel", pocket_choice);
 }
 
 static bool get_address(uint8_t out[20]) {
@@ -302,7 +370,7 @@ static void handle_u2f_sign(uint8_t p1, const uint8_t *data, int lc) {
             return;
         }
         uint64_t value = read_u64_be(kh, 20);
-        if (value <= POCKET_PER_TAP && value <= pocket_left) {
+        if (value <= USDC(PER_TAP_CAPS[per_tap_idx]) && value <= pocket_left) {
             memcpy(request, kh, REQ_LEN);
             if (!sign_request()) {
                 io_send_sw(SW_CRYPTO);
@@ -310,12 +378,16 @@ static void handle_u2f_sign(uint8_t p1, const uint8_t *data, int lc) {
             }
             state = IDLE;  // an approved but uncollected review is dropped: its response was overwritten
             pocket_left -= value;
+            if (--pocket_taps_left == 0) {
+                pocket_left = 0;  // all payments used: pocket mode off
+            }
             memcpy(pocket_paid, kh, REQ_LEN);
             pocket_paid_valid = true;
             io_send_response_pointer(response, response_len, SW_OK);
             char amount[24];
             format_usdc(amount, sizeof(amount), value);
-            snprintf(review_text, sizeof(review_text), "Paid %s USDC", amount);
+            size_t n = snprintf(review_text, sizeof(review_text), "Paid %s USDC\nto 0x", amount);
+            format_hex(request, 20, review_text + n, sizeof(review_text) - n);  // not kh: the reply overwrote it
             nbgl_useCaseStatus(review_text, true, ui_home);
             return;
         }
@@ -331,6 +403,9 @@ void app_main(void) {
     const uint8_t *data;
 
     io_init();
+    per_tap_idx = 1;  // 5 USDC
+    total_idx = 1;    // 20 USDC
+    count_idx = 2;    // 10 payments
     ui_home();
 
     for (;;) {

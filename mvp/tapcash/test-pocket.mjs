@@ -1,5 +1,5 @@
 // Pocket mode on Speculos: small payments sign on the first tap, larger or over-budget ones
-// fall back to the two-tap review. Start Speculos as in test.mjs (fresh, on the home screen), then
+// fall back to the two-tap review; limits change in Settings. Start Speculos as in test.mjs (fresh, on the home screen), then
 //   node test-pocket.mjs
 import assert from 'node:assert/strict';
 import { recoverTypedDataAddress, serializeSignature, toHex } from 'viem';
@@ -78,4 +78,28 @@ await sleep(1500);
 await press('Turn off pocket mode');
 await sleep(2500);
 assert.match(await screen(), /Turn on pocket mode/);
+
+// Limits are picked in Settings (gear, then one page each): 1 USDC per tap, 1 payment
+const touch = async (x, y) => { await post('/finger', { action: 'press-and-release', x, y }); await sleep(1500); };
+await touch(403, 75);
+await press('1 USDC per tap');
+await touch(430, 552);  // next page: total
+await touch(430, 552);  // next page: number of payments
+await press('1 payment');
+await touch(50, 48);    // back home
+await press('Turn on pocket mode');
+assert.match(await screen(), /Up to 1 payment of at most 1 USDC each/);
+await press('Turn on');
+await sleep(2500);
+assert.match(await screen(), /20 USDC left\s*for 1 more payment(?!s)/);
+assert.equal(await sign(req(2)), '6985');  // over the new 1 USDC cap
+await sleep(1000);
+await press('Reject');
+await sleep(1500);
+const one = req(1);
+await assertSigned(one, await sign(one));
+await sleep(1000);
+assert.match(await screen(), /Paid 1 USDC/);
+await sleep(3000);
+assert.match((await events()).at(-1).text, /Turn on pocket mode/);  // the only payment used: off
 console.log('ok pocket', flex);
