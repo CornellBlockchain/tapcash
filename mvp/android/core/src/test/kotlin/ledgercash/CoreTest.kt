@@ -54,8 +54,9 @@ class CoreTest {
         val stored = mutableListOf<Auth>()
         val p = Payee(payeeKey) { stored += it }
         val getReq = Hex.decode("E011000000")
-        val selectOurs = byteArrayOf(0, 0xA4.toByte(), 4, 0, 12) + Protocol.AID + byteArrayOf(0)
+        val selectOurs = byteArrayOf(0, 0xA4.toByte(), 4, 0, 12) + Protocol.AID // what cash.c's reader sends (no Le)
         assertArrayEquals(Protocol.SW_OK, p.handle(selectOurs))
+        assertArrayEquals(Protocol.SW_WRONG_LENGTH, p.handle(selectOurs + byteArrayOf(0))) // cash.c's apdu_parser: no Le
         assertArrayEquals(Protocol.SW_FILE_NOT_FOUND, p.handle(Hex.decode("00A4040007D2760000850101")))
         assertArrayEquals(Protocol.SW_NO_REQUEST, p.handle(getReq))
         assertNull(runCatching { p.arm(31337, token, 1_000_000, "café", 2000000000, 7) }.getOrNull()) // non-ASCII label refused

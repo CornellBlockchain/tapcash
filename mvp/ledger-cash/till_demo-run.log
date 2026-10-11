@@ -1,0 +1,28 @@
+  [payer] Set USDC network | Chain ID 31337 | USDC  | 0x5FBDB2315678AFECB367F0 | 32D93F642F64180AA3 | Reject | Approve
+  [payee] Set USDC network | Chain ID 31337 | USDC  | 0x5FBDB2315678AFECB367F0 | 32D93F642F64180AA3 | Reject | Approve
+  [payer] Load 20 USDC as cash | Cash after: 20 USDC | Reject | Approve
+== busy guard: a USB SET_REQUEST while the till keypad is open
+  keypad open -> SET_REQUEST B007; back arrow -> home, GET_REQUEST B006
+== till: payee types 4 USDC + 50 cents, picks Coffee, approves
+  GET_REQUEST: 4.5 USDC 'Coffee' to the payee, payeeSig recovers to 0xb1124942BA3CeB48d87Dac9baBc50ca3B50A72db
+== tap: the payer pays the till's request
+  tap: card 04a1b2c3 in field
+    reader > card 00a404000cf04c45444745524341534801
+    reader < card 9000
+    reader > card e011000000
+    reader < card 0000000000007a695fbdb2315678afecb367f032d93f642f64180aa3b1124942ba3ceb48d87dac9babc50ca3b50a72db000000000044aa20ffffffffffffffffd159669d436f6666656500000000000000000000000000000000000053a15150d774983b19fe30fa55a34464356c8531390359d37fb7b8e731635aa565e1cebd7ba3272bb8df6c024c1338b9794bc26a2915a84ff43e99c9004b50591b9000
+  [payer screen] Reading request | Pay with | USDC cash | Swipe to review | Reject | 1 of 4
+  [payer screen] Pay | 4.5 USDC | To | 0xB1124942BA3CEB48 | D87DAC9BABC50CA3B | 50A72DB | For | Coffee | Reject | 2 of 4
+  [payer screen] Cash left after | 15.5 USDC | Reject | 3 of 4
+  [payer screen] Pay 4.5 USDC? | Reject | 4 of 4 | Hold to sign
+    reader > card e0230000a146ce8565dd320e3764aa33cbda7024f469132354b1124942ba3ceb48d87dac9babc50ca3b50a72db000000000044aa200000000000000000fffffffffffffffffa26e9027015d8b5b29d6cc0855880a7f8a0c52a996d9b3a84c07d0a3b6a34a41bd2c16b5e6ef2e50d567e079ce4331f86aa8b245d20f492856424429b639b12160eeddc2474110735e5e23a11c1c252915d9ea83cce3b80536475a9d0fa041d8f
+    reader < card 017eef3e28303aaeef7b03dd289cc447396e27a10fb483b992af969d5ebb52105c6be9a8a75ecc2c8c2e3e99a359ce789a7f041324d3c217124d7aebe57264f2cf1c9000
+  tap: card removed after 3 APDU(s)
+  TAP_STATUS PAID sw 9000   payer screen: Sending payment | Paid 4.5 USDC | to  | 0xB1124942BA3CEB48 | D87DAC9BABC50CA3B | 50A72DB
+  PAID: payer 20 -> 15.5, payee screen 'Signed IOU for 4.5 USDC ... Not attested / Not settled yet'
+== settlement QR of the latest auth (payee settings -> Show settlement QR)
+  QR (200 chars) decodes to the stored auth: lcash:Rs6FZd0yDjdkqjPL2nAk9GkTI1SxEklCuj...
+== cancel: till 2 USDC + 05 cents for 'Other' (labels page 2), then 'Cancel request' on the home
+  2.05 USDC 'Other' served, then Cancel request -> GET_REQUEST B006, home back to 'Cash: 0 USDC'
+ALL PASS
+PYEXIT=0

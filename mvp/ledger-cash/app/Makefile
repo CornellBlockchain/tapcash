@@ -109,7 +109,7 @@ ENABLE_NBGL_FOR_NANO_DEVICES = 1
 ########################################
 ENABLE_NBGL_QRCODE = 1
 #ENABLE_NBGL_KEYBOARD = 1
-#ENABLE_NBGL_KEYPAD = 1
+ENABLE_NBGL_KEYPAD = 1
 
 ########################################
 #       SWAP FEATURE FLAG      		   #

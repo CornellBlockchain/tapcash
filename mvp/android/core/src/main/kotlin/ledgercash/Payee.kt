@@ -18,22 +18,23 @@ class Payee(private val priv: ByteArray, private val onAuth: (Auth) -> Unit = {}
 
     @Synchronized
     fun handle(apdu: ByteArray): ByteArray {
-        if (Protocol.isSelect(apdu)) return if (Protocol.isSelectOurs(apdu)) Protocol.SW_OK else Protocol.SW_FILE_NOT_FOUND
-        if (apdu.size < 4) return Protocol.SW_WRONG_LENGTH
+        // Same checks in the same order as cash.c over NFC (checked by mvp/ledger-cash/interop/android_payee_tap.py):
+        // SDK apdu_parser (4 bytes, or exactly 5 + Lc; no Le), SELECT, CLA, NFC allowlist, then P1/P2.
+        if (apdu.size < 4 || apdu.size > 4 && apdu.size != 5 + (apdu[4].toInt() and 0xff)) return Protocol.SW_WRONG_LENGTH
+        if (apdu[0].toInt() == 0 && apdu[1] == 0xA4.toByte()) {
+            return if (Protocol.isSelectOurs(apdu)) Protocol.SW_OK else Protocol.SW_FILE_NOT_FOUND
+        }
         if ((apdu[0].toInt() and 0xff) != Protocol.CLA) return Protocol.SW_CLA_NOT_SUPPORTED
+        val ins = apdu[1].toInt() and 0xff
+        if (ins != Protocol.INS_GET_REQUEST && ins != Protocol.INS_PUT_AUTH) return Protocol.SW_INS_NOT_SUPPORTED
         if (apdu[2].toInt() != 0 || apdu[3].toInt() != 0) return Protocol.SW_BAD_P1P2
-        val lc = if (apdu.size > 5) apdu[4].toInt() and 0xff else 0
-        if (apdu.size > 5 && apdu.size < 5 + lc) return Protocol.SW_WRONG_LENGTH
-        val data = if (apdu.size > 5) apdu.copyOfRange(5, 5 + lc) else ByteArray(0)
+        val data = if (apdu.size > 5) apdu.copyOfRange(5, apdu.size) else ByteArray(0)
         val req = request
-        return when (apdu[1].toInt() and 0xff) {
-            Protocol.INS_GET_REQUEST -> req?.encode()?.plus(Protocol.SW_OK) ?: Protocol.SW_NO_REQUEST
-            Protocol.INS_PUT_AUTH -> when {
-                data.size != Protocol.AUTH_LEN -> Protocol.SW_WRONG_LENGTH
-                req == null -> Protocol.SW_NO_REQUEST
-                else -> putAuth(req, Auth.decode(data))
-            }
-            else -> Protocol.SW_INS_NOT_SUPPORTED
+        return when {
+            ins == Protocol.INS_GET_REQUEST -> req?.encode()?.plus(Protocol.SW_OK) ?: Protocol.SW_NO_REQUEST
+            data.size != Protocol.AUTH_LEN -> Protocol.SW_WRONG_LENGTH
+            req == null -> Protocol.SW_NO_REQUEST
+            else -> putAuth(req, Auth.decode(data))
         }
     }
 

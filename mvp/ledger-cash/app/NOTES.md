@@ -1,5 +1,16 @@
 # ledger-cash device app v0 (stage B): NOTES
 
+> Update (attested IOUs, 2026-10-10): INS 25 PUT_ATTEST, 32 GET_ATTESTATION, 33 GET_LAST_ATTEST, SW B00A; the payee
+> IOU status shows "Certified device key" (Nano: "Certified key") / "Not attested". New hashes flex `69873224...2acdb`,
+> nanos2 `63e3c196...7bb9`: see ../NOTES.md "Attested IOUs", ../README.md "Attested IOUs" and ../HARDWARE.md.
+> (The "Certified device key" wording replaced "Attested: Ledger Cash 0.0.1": the code-hash binding is forgeable by
+> any app via key1_sign_without_code_hash, so v1 is a negative result; see ../README.md and ../../../DX-FEEDBACK.md.)
+
+> Update (till UX, 2026-10-10): the payee home with a pending request now reads "Waiting for tap: X label / to
+> 0x....." with a "Cancel request" action (was "Receive X to 0x..."); the Nano home action is "Request payment" when
+> idle. Keypad + label till, settlement QR, and new hashes flex `a601af35...a6dbc`, nanos2 `7ffe99e1...86713`: see
+> ../NOTES.md "Till UX" and ../HARDWARE.md. The screens dump below predates it.
+
 > Update (cash account, 2026-10-10): the app's key moved from 44'/60'/0'/0/0 to the dedicated cash path
 > 44'/1279476051'/0'/0/0 (`PATH_APP_LOAD_PARAMS = "44'/1279476051'"` only). Test fixtures are now payer
 > `0x46cE8565DD320e3764aa33cbdA7024F469132354`, payee `0xb1124942BA3CeB48d87Dac9baBc50ca3B50A72db`; the 0x153a... /

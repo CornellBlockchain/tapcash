@@ -1,7 +1,7 @@
 /*
  * Ledger Cash v0: USDC as device-held cash, paid by EIP-3009 TransferWithAuthorization.
  * One file on purpose. Every handler takes raw bytes and answers with io_send_*. USB and NFC card
- * emulation share io_recv_command; over NFC only SELECT, GET_REQUEST and PUT_AUTH are accepted.
+ * emulation share io_recv_command; over NFC only SELECT, GET_REQUEST, PUT_AUTH and PUT_ATTEST are accepted.
  * The reader side (TAP_TO_PAY: payer drives the payee over NFC) reuses pay_review()/pay_sign():
  *   SELECT AID -> GET_REQUEST -> review -> sign + debit -> PUT_AUTH -> verify receipt.
  *
@@ -12,6 +12,9 @@
  *                   keccak256(request[0:92]))
  *   auth (161)    = from 20 | to 20 | value u64 | validAfter u64 | validBefore u64 | nonce 32 |
  *                   v1 r32 s32   (EIP-712 TransferWithAuthorization, domain USDC / "2")
+ *   attestation (<= 243) = endorsementPub 65 | certLen 1 | cert (DER, CERTIFIER over sha256(0xFE || pub)) |
+ *                   codeHash 32 | sigLen 1 | sig (DER, endorsement slot 1 over sha256(keccak256(auth) || codeHash))
+ *                   The payer sends it after a verified receipt (PUT_ATTEST); see "Attested IOUs" in README.md.
  */
 #include <stdint.h>
 #include <string.h>
@@ -45,8 +48,11 @@ enum {
     INS_PAY = 0x22,
     INS_PUT_AUTH = 0x23,
     INS_GET_AUTHS = 0x24,
+    INS_PUT_ATTEST = 0x25,
     INS_TAP_TO_PAY = 0x30,
     INS_TAP_STATUS = 0x31,
+    INS_GET_ATTESTATION = 0x32,
+    INS_GET_LAST_ATTEST = 0x33,
 };
 // SELECT AID = "F0" + "LEDGERCASH" + "01" (proprietary RID range F0)
 static const uint8_t AID[12] = {0xF0, 'L', 'E', 'D', 'G', 'E', 'R', 'C', 'A', 'S', 'H', 0x01};
@@ -68,6 +74,7 @@ static const uint8_t AID[12] = {0xF0, 'L', 'E', 'D', 'G', 'E', 'R', 'C', 'A', 'S
 #define SW_BUSY            0xB007
 #define SW_CARD_GONE       0xB008  // tap: card left the field
 #define SW_NO_ANSWER       0xB009  // tap: payee did not answer in time
+#define SW_NOT_ATTESTED    0xB00A  // endorsement slot not provisioned, or an attestation that does not verify
 #define SW_CRYPTO          0xB0FF
 
 #define REQ_BODY  92
@@ -129,19 +136,29 @@ static uint8_t g_label[LABEL_LEN];
 static uint8_t g_cfg[28];
 static bool g_busy;  // a review is on screen: refuse other APDUs so the screen can't be swapped
 
-static char s_amount[32], s_after[32], s_addr[43], s_label[LABEL_LEN + 1], s_msg[112], s_sub[96];
-static char s_tagline[80];
+static char s_amount[32], s_after[32], s_addr[43], s_label[LABEL_LEN + 1], s_msg[160], s_sub[96];
+static char s_tagline[112];
 enum { PAY_NONE, PAY_USB, PAY_TAP };  // who opened the review on screen
 static uint8_t g_pay_src;
+static bool g_req_usb;  // the request review on screen came from a USB SET_REQUEST (else the on-device till)
+static nbgl_homeAction_t g_home_action;
 
 #ifdef HAVE_NFC_READER
-static nbgl_homeAction_t g_home_action;
 // payer tap state, reported by TAP_STATUS
 enum { TAP_IDLE, TAP_WAIT, TAP_BUSY, TAP_SENT, TAP_PAID, TAP_FAILED, TAP_NO_RECEIPT };
 static uint8_t g_tap;
 static uint16_t g_tap_sw;
 static uint8_t g_tap_auth[AUTH_LEN];     // last auth signed by a tap (kept if no receipt came back)
-static uint8_t g_tap_cmd[5 + AUTH_LEN];  // PUT_AUTH command sent to the card
+#endif
+
+// Attestation of the last IOU this device signed (payer) or received (payee); RAM only, wire format above.
+#define ATT_MAX (65 + 1 + 72 + 32 + 1 + 72)
+enum { ATT_NONE, ATT_SIGNED, ATT_VERIFIED, ATT_UNVERIFIED };  // GET_LAST_ATTEST state byte
+static uint8_t g_att[ATT_MAX];
+static uint8_t g_att_len;
+static uint8_t g_att_state;
+#ifdef HAVE_NFC_READER
+static uint8_t g_tap_cmd[5 + ATT_MAX];  // PUT_AUTH, then PUT_ATTEST, sent to the card
 #endif
 
 // Dedicated cash key: 44'/1279476051'/0'/0/0 (coin type 0x4C434153 "LCAS", not in SLIP-44). The Makefile allows
@@ -149,6 +166,8 @@ static uint8_t g_tap_cmd[5 + AUTH_LEN];  // PUT_AUTH command sent to the card
 static const uint32_t PATH[] = {0x8000002C, 0xCC434153, 0x80000000, 0, 0};
 
 static void ui_home(void);
+static void till_start(void);
+static void till_cancel(void);
 #ifdef HAVE_NFC_READER
 static void tap_menu(void);
 #endif
@@ -299,6 +318,72 @@ static void auth_digest(const uint8_t *a, uint8_t out[32]) {
     keccak(buf, 66, out);
 }
 
+/* ---------------- attestation (BOLOS endorsement, slot 1) ----------------
+ * The payee trusts an IOU's attestation when CERTIFIER certified the payer's endorsement key and that key signed
+ * keccak(auth) together with the code hash of the app it ran in, and that hash equals the payee's own code hash.
+ * CERTIFIER is Speculos's default ATTESTATION_PRIVATE_KEY (src/environment.c): emulation only. On a retail device
+ * it would be the Owner key that ran endorsementSetup (README "Attested IOUs"); replace it before any real use. */
+static const uint8_t CERTIFIER[65] = {
+    0x04, 0x41, 0x14, 0xD1, 0x6A, 0xEC, 0xED, 0xA8, 0xD7, 0x81, 0x31, 0x1B, 0xD3, 0x4F, 0xD5, 0x7A, 0x44,
+    0xAC, 0xFC, 0xBC, 0xF3, 0x57, 0xF0, 0x67, 0x88, 0x46, 0x48, 0x07, 0x32, 0x52, 0x69, 0x9C, 0xBD, 0x46,
+    0xF6, 0x41, 0xC1, 0x75, 0x54, 0xED, 0x65, 0x3E, 0x6A, 0x42, 0x7F, 0x4A, 0xEA, 0xFA, 0xF7, 0x4E, 0x32,
+    0x18, 0xE5, 0xDD, 0x0C, 0x04, 0x20, 0xB6, 0xC8, 0xCF, 0x60, 0x5A, 0x04, 0x96, 0x4E};
+
+// pub | certLen | cert | codeHash of this device's slot 1; 0 if the slot is not provisioned (retail default)
+static size_t att_header(uint8_t *o) {
+    size_t n = 65, c = ENDORSEMENT_MAX_ASN1_LENGTH;
+    if (sys_endorsement_get_public_key(ENDORSEMENT_SLOT_1, o, &n) != 0 || n != 65) return 0;
+    if (sys_endorsement_get_public_key_signature(ENDORSEMENT_SLOT_1, o + 66, &c) != 0 || c > 72) return 0;
+    o[65] = c;
+    if (sys_endorsement_get_code_hash(o + 66 + c, 32) != 0) return 0;
+    return 66 + c + 32;
+}
+
+// Payer: attest a freshly signed auth. Failure (unprovisioned slot) leaves no attestation; the payment stands.
+// ponytail: armed only by a successful GET_ATTESTATION, so a device never makes an endorsement syscall in the payment
+// path unless the host has seen the slot work (the calls are untested on retail). Ceiling: a standalone "Pay by tap"
+// after an app restart does not attest until a host sends GET_ATTESTATION. Upgrade: arm at start once retail is known.
+static bool g_att_armed;
+static void att_sign(const uint8_t a[AUTH_LEN]) {
+    uint8_t h[32];
+    size_t n, s = ENDORSEMENT_SIGNATURE_MAX_LENGTH;
+    g_att_len = 0;
+    g_att_state = ATT_NONE;
+    if (!g_att_armed || (n = att_header(g_att)) == 0) return;
+    keccak(a, AUTH_LEN, h);
+    if (sys_endorsement_key1_sign_data(h, 32, g_att + n + 1, &s) != 0 || s > 72) return;
+    g_att[n] = s;
+    g_att_len = n + 1 + s;
+    g_att_state = ATT_SIGNED;
+}
+
+// DER ECDSA secp256k1 over sha256(msg)
+static bool ecdsa_ok(const uint8_t pub[65], const uint8_t *msg, size_t len, const uint8_t *der, size_t dlen) {
+    cx_ecfp_public_key_t k;
+    uint8_t h[32];
+    if (cx_hash_sha256(msg, len, h, 32) != 32) return false;
+    if (cx_ecfp_init_public_key_no_throw(CX_CURVE_256K1, pub, 65, &k) != CX_OK) return false;
+    return cx_ecdsa_verify_no_throw(&k, h, 32, der, dlen);
+}
+
+// Payee: does attestation d (wire format) cover auth a and come from this same build under CERTIFIER?
+static bool att_verify(const uint8_t *d, size_t len, const uint8_t *a) {
+    uint8_t m[66];
+    if (len < 66 + 32 + 1) return false;
+    size_t c = d[65];
+    if (c > 72 || 66 + c + 33 > len) return false;
+    size_t s = d[66 + c + 32];
+    if (s > 72 || 66 + c + 33 + s != len) return false;
+    m[0] = 0xFE;  // Owner-certificate role byte (ledgerblue endorsementSetup, Speculos env_init_user_certificate)
+    memcpy(m + 1, d, 65);
+    if (!ecdsa_ok(CERTIFIER, m, 66, d + 66, c)) return false;
+    // ponytail: pinned code hash = this payee's own (a build cannot embed its own hash). Ceiling: payer and payee
+    // must run the same build on the same model (target id is hashed). Upgrade: a TRUST_BUILD APDU approved on screen.
+    keccak(a, AUTH_LEN, m);
+    if (sys_endorsement_get_code_hash(m + 32, 32) != 0) return false;
+    return ecdsa_ok(d, m, 64, d + 66 + c + 33, s);
+}
+
 /* ---------------- formatting ---------------- */
 static void fmt_usdc(char *dst, size_t n, uint64_t v) {
     char tmp[24] = {0};  // SDK format_fpu64 does not NUL-terminate, it relies on a zeroed dst
@@ -339,25 +424,52 @@ static void app_quit(void) {
     os_sched_exit(-1);
 }
 
+#ifdef HAVE_SE_TOUCH
+static void qr_show(void);
+// Flex/Stax home has one action button ("Pay by tap"), so the till sits behind the top-right settings wheel.
+static void till_bar(int token, uint8_t index, int page) {
+    UNUSED(index);
+    UNUSED(page);
+    if (token == FIRST_USER_TOKEN) till_start();
+    if (token == FIRST_USER_TOKEN + 1) qr_show();
+}
+static const char *const TILL_BARS[] = {"Request payment", "Show settlement QR"};
+static const uint8_t TILL_TOKENS[] = {FIRST_USER_TOKEN, FIRST_USER_TOKEN + 1};
+static nbgl_content_t g_till_menu;  // RAM, filled at run time like the boilerplate's settings (PIC)
+static nbgl_genericContents_t g_till_settings;
+static const nbgl_genericContents_t *home_settings(void) {
+    g_till_menu = (nbgl_content_t){.type = BARS_LIST,
+                                   .content.barsList = {.barTexts = TILL_BARS, .tokens = TILL_TOKENS, .nbBars = 2},
+                                   .contentActionCallback = till_bar};
+    g_till_settings = (nbgl_genericContents_t){.contentsList = &g_till_menu, .nbContents = 1};
+    return &g_till_settings;
+}
+#else
+static const nbgl_genericContents_t *home_settings(void) {
+    return NULL;
+}
+#endif
+
 static void ui_home(void) {
     char amt[32], a[43];
     if (g_req_valid) {
         fmt_usdc(amt, sizeof(amt), read_u64_be(g_req, R_VALUE));
         fmt_addr(a, g_req + R_PAYTO);  // the payer matches this against the "To" on its review
-        snprintf(s_tagline, sizeof(s_tagline), "Receive %s to\n%.*s...%s", amt, 6, a, a + 37);  // SDK snprintf: %.*s, not %.6s
+        fmt_label(g_req + R_LABEL);
+        // SDK snprintf: %.*s, not %.6s
+        snprintf(s_tagline, sizeof(s_tagline), "Waiting for tap:\n%s %s\nto %.*s...%s", amt, s_label, 6, a, a + 37);
+        g_home_action = (nbgl_homeAction_t){.text = "Cancel request", .callback = till_cancel, .style = SOFT_HOME_ACTION};
     } else {
         fmt_usdc(amt, sizeof(amt), NV.wallet.balance);
         snprintf(s_tagline, sizeof(s_tagline), "Cash: %s", amt);
-    }
 #ifdef HAVE_NFC_READER
-    g_home_action.text = "Pay by tap";
-    g_home_action.callback = tap_menu;
-    g_home_action.style = STRONG_HOME_ACTION;
-    nbgl_useCaseHomeAndSettings(APPNAME, &ICON, s_tagline, INIT_HOME_PAGE, NULL, NULL, &g_home_action,
-                                app_quit);
+        g_home_action = (nbgl_homeAction_t){.text = "Pay by tap", .callback = tap_menu, .style = STRONG_HOME_ACTION};
 #else
-    nbgl_useCaseHomeAndSettings(APPNAME, &ICON, s_tagline, INIT_HOME_PAGE, NULL, NULL, NULL, app_quit);
+        g_home_action = (nbgl_homeAction_t){.text = "Request payment", .callback = till_start, .style = STRONG_HOME_ACTION};
 #endif
+    }
+    nbgl_useCaseHomeAndSettings(APPNAME, &ICON, s_tagline, INIT_HOME_PAGE, home_settings(), NULL, &g_home_action,
+                                app_quit);
 }
 
 /* ---------------- SET_CONFIG ---------------- */
@@ -428,9 +540,15 @@ static int get_balance(void) {
 }
 
 /* ---------------- SET_REQUEST / GET_REQUEST (payee) ---------------- */
+// The till review has no APDU waiting for an answer: only a USB SET_REQUEST gets a status word.
+static void request_reply(uint16_t sw) {
+    if (g_req_usb) io_send_sw(sw);
+    g_req_usb = false;
+}
+
 static void request_choice(bool ok) {
     if (!ok) {
-        io_send_sw(SW_REJECTED);
+        request_reply(SW_REJECTED);
         choice_done(false);
         return;
     }
@@ -452,13 +570,24 @@ static void request_choice(bool ok) {
     if (!sign_hash(h, q + R_SIG, q + R_SIG + 32, &v)) goto fail;
     q[R_SIG + 64] = v;
     g_req_valid = true;
-    io_send_sw(SW_OK);
+    request_reply(SW_OK);
     g_busy = false;
-    ui_home();  // home tagline: "Ready to receive <amount>"
+    ui_home();  // home tagline: "Waiting for tap: <amount> <label>", action "Cancel request"
     return;
 fail:
-    io_send_sw(SW_CRYPTO);
+    request_reply(SW_CRYPTO);
     choice_done(false);
+}
+
+// Shared by USB SET_REQUEST and the till: g_value / g_label are set, show the request for approval.
+static void request_review(bool usb) {
+    fmt_usdc(s_amount, sizeof(s_amount), g_value);
+    fmt_label(g_label);
+    snprintf(s_msg, sizeof(s_msg), "Request %s", s_amount);
+    snprintf(s_sub, sizeof(s_sub), "For: %s", s_label);
+    g_req_usb = usb;
+    g_busy = true;
+    nbgl_useCaseChoice(&ICON, s_msg, s_sub, "Approve", "Reject", request_choice);
 }
 
 static int set_request(const uint8_t *d, size_t len) {
@@ -469,13 +598,75 @@ static int set_request(const uint8_t *d, size_t len) {
     g_value = read_u64_be(d, 0);
     if (g_value == 0 || !label_ok(g_label, LABEL_LEN)) return io_send_sw(SW_BAD_DATA);
     g_req_valid = false;
-    fmt_usdc(s_amount, sizeof(s_amount), g_value);
-    fmt_label(g_label);
-    snprintf(s_msg, sizeof(s_msg), "Request %s", s_amount);
-    snprintf(s_sub, sizeof(s_sub), "For: %s", s_label);
-    g_busy = true;
-    nbgl_useCaseChoice(&ICON, s_msg, s_sub, "Approve", "Reject", request_choice);
+    request_review(true);
     return 0;
+}
+
+/* ---------------- Till: the payee builds the same request on its own screen ----------------
+ * Keypad (whole USDC) -> keypad (cents) -> label list -> request_review(false). g_busy is held for the whole
+ * flow so a USB SET_REQUEST cannot swap g_value / g_label under it; every exit clears it. */
+static const char *const TILL_LABELS[] = {"Coffee", "Food", "Groceries", "Transport", "Gift", "Other"};
+#define TILL_N (sizeof(TILL_LABELS) / sizeof(TILL_LABELS[0]))
+static uint8_t TILL_LABEL_TOKENS[TILL_N];
+static nbgl_content_t g_till_labels;
+static nbgl_genericContents_t g_till_labels_gc;
+
+static void till_back(void) {
+    g_busy = false;
+    ui_home();
+}
+
+static uint64_t digits(const uint8_t *d, uint8_t n) {
+    uint64_t v = 0;
+    for (uint8_t i = 0; i < n; i++) v = v * 10 + (d[i] - '0');  // keypad gives ASCII '0'..'9' only
+    return v;
+}
+
+static void till_label(int token, uint8_t index, int page) {
+    UNUSED(index);
+    UNUSED(page);
+    if (token < FIRST_USER_TOKEN || token >= FIRST_USER_TOKEN + (int) TILL_N) return;
+    const char *l = (const char *) PIC(TILL_LABELS[token - FIRST_USER_TOKEN]);
+    memset(g_label, 0, LABEL_LEN);
+    memcpy(g_label, l, strlen(l));
+    request_review(false);
+}
+
+static void till_cents(const uint8_t *d, uint8_t n) {
+    g_value += digits(d, n) * 10000;  // 1 USDC = 1 000 000; cents 0..99
+    if (g_value == 0) {
+        g_busy = false;
+        nbgl_useCaseStatus("Amount must be\nabove 0", false, ui_home);
+        return;
+    }
+    for (uint8_t i = 0; i < TILL_N; i++) TILL_LABEL_TOKENS[i] = FIRST_USER_TOKEN + i;
+    g_till_labels = (nbgl_content_t){
+        .type = BARS_LIST,
+        .content.barsList = {.barTexts = TILL_LABELS, .tokens = TILL_LABEL_TOKENS, .nbBars = TILL_N},
+        .contentActionCallback = till_label};
+    g_till_labels_gc = (nbgl_genericContents_t){.contentsList = &g_till_labels, .nbContents = 1};
+    nbgl_useCaseGenericConfiguration("Payment for", 0, &g_till_labels_gc, till_back);
+}
+
+static void till_whole(const uint8_t *d, uint8_t n) {
+    g_value = digits(d, n) * 1000000;
+    nbgl_useCaseKeypad("Cents (2 digits)", 2, 2, false, false, till_cents, till_back);
+}
+
+static void till_start(void) {
+    if (g_busy) return;
+    if (!NV.configured) {
+        nbgl_useCaseStatus("Set the USDC network first", false, ui_home);
+        return;
+    }
+    g_req_valid = false;  // like SET_REQUEST: starting a new request drops the pending one
+    g_busy = true;
+    nbgl_useCaseKeypad("Amount in USDC", 1, 6, false, false, till_whole, till_back);
+}
+
+static void till_cancel(void) {
+    g_req_valid = false;
+    nbgl_useCaseStatus("Request cancelled", false, ui_home);
 }
 
 /* ---------------- PAY (payer) ---------------- */
@@ -520,6 +711,7 @@ static uint16_t pay_sign(uint8_t a[AUTH_LEN]) {
     keccak(q, REQ_BODY, a + A_NONCE);
     auth_digest(a, h);
     if (!sign_hash(h, a + A_R, a + A_S, a + A_V)) return SW_CRYPTO;
+    att_sign(a);  // before the debit: if an endorsement call misbehaves on a device, nothing is debited yet
 
     memcpy(&w, (const void *) &NV.wallet, sizeof(w));
     w.balance -= read_u64_be(q, R_VALUE);
@@ -620,6 +812,15 @@ static uint16_t tap_reply(bool error, bool timeout, const uint8_t *d, size_t n) 
     return 0;
 }
 
+// Optional last step: the payment is already PAID; a v0 payee (6D00), a lost card or a refusal changes nothing.
+static void tap_on_attest(bool error, bool timeout, uint8_t *d, size_t n) {
+    UNUSED(error);
+    UNUSED(timeout);
+    UNUSED(d);
+    UNUSED(n);
+    tap_end(TAP_PAID, SW_OK, s_msg);
+}
+
 static void tap_on_receipt(bool error, bool timeout, uint8_t *d, size_t n) {
     uint16_t sw = tap_reply(error, timeout, d, n);
     if (!sw) return;
@@ -640,7 +841,14 @@ static void tap_on_receipt(bool error, bool timeout, uint8_t *d, size_t n) {
     }
     fmt_addr(s_addr, g_pay + R_PAYTO);
     snprintf(s_msg, sizeof(s_msg), "Paid %s\nto %s", s_amount, s_addr);
-    tap_end(TAP_PAID, SW_OK, s_msg);
+    if (g_att_state != ATT_SIGNED) {
+        tap_end(TAP_PAID, SW_OK, s_msg);
+        return;
+    }
+    g_tap_cmd[1] = INS_PUT_ATTEST;
+    g_tap_cmd[4] = g_att_len;
+    memcpy(g_tap_cmd + 5, g_att, g_att_len);
+    io_nfc_reader_send(g_tap_cmd, 5 + g_att_len, tap_on_attest, 2000);
 }
 
 static void tap_choice(bool ok) {
@@ -660,7 +868,7 @@ static void tap_choice(bool ok) {
     g_tap_cmd[4] = AUTH_LEN;
     memcpy(g_tap_cmd + 5, g_tap_auth, AUTH_LEN);
     nbgl_useCaseSpinner("Sending payment");
-    io_nfc_reader_send(g_tap_cmd, sizeof(g_tap_cmd), tap_on_receipt, 5000);
+    io_nfc_reader_send(g_tap_cmd, 5 + AUTH_LEN, tap_on_receipt, 5000);
 }
 
 static void tap_on_request(bool error, bool timeout, uint8_t *d, size_t n) {
@@ -741,7 +949,24 @@ static int tap_status(void) {
 }
 #endif  // HAVE_NFC_READER
 
-/* ---------------- PUT_AUTH / GET_AUTHS (payee) ---------------- */
+/* ---------------- PUT_AUTH / PUT_ATTEST / GET_AUTHS (payee) ---------------- */
+// Not "Received": any key can sign a matching auth; nothing here proves funds (README Honest limits).
+// "Certified device key" means only what att_verify checks; it is forgeable by any app on the device via
+// key1_sign_without_code_hash (README "Attested IOUs"), and never means the IOU is funded.
+static void iou_status(const uint8_t *a, bool attested) {
+    fmt_addr(s_addr, a + A_FROM);
+    fmt_usdc(s_amount, sizeof(s_amount), read_u64_be(a, A_VALUE));
+#if defined(TARGET_NANOS2) || defined(TARGET_NANOX)
+    // 128x64 status fits 4 lines: short address (full one via GET_AUTHS), else the last line is cut off
+    snprintf(s_msg, sizeof(s_msg), "IOU %s from\n%.*s...%s\n%s\nNot settled yet", s_amount, 6, s_addr,
+             s_addr + 37, attested ? "Certified key" : "Not attested");
+#else
+    snprintf(s_msg, sizeof(s_msg), "Signed IOU for %s\nfrom %s\n%s\nNot settled yet", s_amount, s_addr,
+             attested ? "Certified device key" : "Not attested");
+#endif
+    nbgl_useCaseStatus(s_msg, true, ui_home);
+}
+
 static int put_auth(const uint8_t *a, size_t len) {
     if (len != AUTH_LEN) return io_send_sw(SW_WRONG_LENGTH);
     if (!g_req_valid) return io_send_sw(SW_NO_REQUEST);
@@ -767,18 +992,102 @@ static int put_auth(const uint8_t *a, size_t len) {
     nvm_write((void *) NV.auths[n % AUTHS_N], (void *) a, AUTH_LEN);
     nvm_write((void *) &NV.auth_count, &next, 4);
     g_req_valid = false;  // a request is paid once
-    fmt_addr(s_addr, a + A_FROM);
-    fmt_usdc(s_amount, sizeof(s_amount), read_u64_be(a, A_VALUE));
-    // Not "Received": any key can sign a matching auth; nothing here proves funds (README Honest limits)
-#if defined(TARGET_NANOS2) || defined(TARGET_NANOX)
-    // 128x64 status fits ~4 lines: short address (full one via GET_AUTHS), else "Not settled yet" is cut off
-    snprintf(s_msg, sizeof(s_msg), "IOU %s from\n%.*s...%s\nNot settled yet", s_amount, 6, s_addr, s_addr + 37);
-#else
-    snprintf(s_msg, sizeof(s_msg), "Signed IOU for %s\nfrom %s\nNot settled yet", s_amount, s_addr);
-#endif
-    io_send_response_pointer(out, sizeof(out), SW_OK);
-    nbgl_useCaseStatus(s_msg, true, ui_home);
+    g_att_len = 0;
+    g_att_state = ATT_NONE;  // until a PUT_ATTEST for this auth verifies
+    io_send_response_pointer(out, sizeof(out), SW_OK);  // reuses the APDU buffer: a is gone, read the NVM copy
+    iou_status((const uint8_t *) NV.auths[n % AUTHS_N], false);
     return 0;
+}
+
+// Payee, after PUT_AUTH: the payer's attestation of the last stored auth (optional; v0 payers never send it)
+static int put_attest(const uint8_t *d, size_t len) {
+    uint32_t n = NV.auth_count;
+    if (n == 0) return io_send_sw(SW_NOT_FOUND);
+    if (len > ATT_MAX) return io_send_sw(SW_WRONG_LENGTH);
+    const uint8_t *a = (const uint8_t *) NV.auths[(n - 1) % AUTHS_N];
+    bool ok = att_verify(d, len, a);
+    // any reader in range can send PUT_ATTEST: a bad one must not overwrite any existing record (SIGNED or
+    // VERIFIED) or its GET_LAST_ATTEST export; put_auth resets to ATT_NONE, so the real payer's PUT_ATTEST lands
+    if (!ok && g_att_state != ATT_NONE) return io_send_sw(SW_NOT_ATTESTED);
+    memcpy(g_att, d, len);
+    g_att_len = len;
+    g_att_state = ok ? ATT_VERIFIED : ATT_UNVERIFIED;
+    io_send_sw(ok ? SW_OK : SW_NOT_ATTESTED);
+    iou_status(a, ok);
+    return 0;
+}
+
+#ifdef HAVE_SE_TOUCH
+/* Settlement QR of the latest stored auth: "lcash:" + base64url(from 20 | to 20 | value 8 | nonce 32 | v 1 | r 32 |
+ * s 32) = 6 + 194 chars. validAfter (0) and validBefore (2^64-1) are left out: put_auth only stores auths with
+ * those values. The full 161 bytes (hex 322, base64 216 chars) do not fit a V10 QR at the ~213-byte budget. */
+static char s_qr[6 + 196];
+static nbgl_layout_t *g_qr_layout;
+
+static void b64url(const uint8_t *in, size_t n, char *out) {
+    static const char A[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
+    const char *a = (const char *) PIC(A);
+    uint32_t acc = 0;
+    int bits = 0;
+    for (size_t i = 0; i < n; i++) {
+        acc = (acc << 8) | in[i];
+        bits += 8;
+        while (bits >= 6) *out++ = a[(acc >> (bits -= 6)) & 63];
+    }
+    if (bits) *out++ = a[(acc << (6 - bits)) & 63];
+    *out = 0;
+}
+
+static void qr_touch(int token, uint8_t index) {
+    UNUSED(token);
+    UNUSED(index);
+    nbgl_layoutRelease(g_qr_layout);
+    g_qr_layout = NULL;
+    g_busy = false;
+    ui_home();
+}
+
+static void qr_show(void) {
+    uint32_t n = NV.auth_count;
+    if (g_busy) return;
+    if (n == 0) {
+        nbgl_useCaseStatus("No signed IOU yet", false, ui_home);
+        return;
+    }
+    const uint8_t *a = (const uint8_t *) NV.auths[(n - 1) % AUTHS_N];
+    uint8_t c[145];
+    memcpy(c, a + A_FROM, 48);                 // from, to, value
+    memcpy(c + 48, a + A_NONCE, AUTH_LEN - A_NONCE);  // nonce, v, r, s
+    memcpy(s_qr, "lcash:", 6);
+    b64url(c, sizeof(c), s_qr + 6);
+    fmt_usdc(s_amount, sizeof(s_amount), read_u64_be(a, A_VALUE));
+    fmt_addr(s_addr, a + A_FROM);
+    snprintf(s_msg, sizeof(s_msg), "IOU %s from %.*s...%s", s_amount, 6, s_addr, s_addr + 37);
+    nbgl_layoutDescription_t d = {.onActionCallback = qr_touch};
+    nbgl_layoutQRCode_t q = {.url = s_qr, .text1 = s_msg, .text2 = "Not settled yet", .centered = true};
+    g_busy = true;  // until Close: an APDU's screen would leave this layout behind
+    g_qr_layout = nbgl_layoutGet(&d);
+    nbgl_layoutAddQRCode(g_qr_layout, &q);
+    nbgl_layoutAddFooter(g_qr_layout, "Close", FIRST_USER_TOKEN, TUNE_TAP_CASUAL);
+    nbgl_layoutDraw(g_qr_layout);
+    nbgl_refresh();
+}
+#endif
+
+// GET_ATTESTATION: this device's endorsement key, its certificate and the running app's code hash
+static int get_attestation(void) {
+    uint8_t o[ATT_MAX];
+    size_t n = att_header(o);
+    g_att_armed = n != 0;  // payments attest from now on (att_sign)
+    return n ? io_send_response_pointer(o, n, SW_OK) : io_send_sw(SW_NOT_ATTESTED);
+}
+
+// GET_LAST_ATTEST: state (ATT_*) | attestation of the last IOU signed or received (empty if none)
+static int get_last_attest(void) {
+    uint8_t o[1 + ATT_MAX];
+    o[0] = g_att_state;
+    memcpy(o + 1, g_att, g_att_len);
+    return io_send_response_pointer(o, 1 + g_att_len, SW_OK);
 }
 
 static int get_auths(uint8_t i) {
@@ -797,7 +1106,8 @@ static int dispatch(const command_t *c) {
     // Over NFC this app is only a payee card: anything else (balance, address, PAY/LOAD_CASH reviews,
     // TAP_TO_PAY) would be open to any reader in range.
 #ifdef HAVE_NFC
-    if (G_io_app.apdu_media == IO_APDU_MEDIA_NFC && c->ins != INS_GET_REQUEST && c->ins != INS_PUT_AUTH) {
+    if (G_io_app.apdu_media == IO_APDU_MEDIA_NFC && c->ins != INS_GET_REQUEST && c->ins != INS_PUT_AUTH &&
+        c->ins != INS_PUT_ATTEST) {
         return io_send_sw(SW_BAD_INS);
     }
 #endif
@@ -819,6 +1129,9 @@ static int dispatch(const command_t *c) {
         case INS_PAY: return pay(c->data, c->lc);
         case INS_PUT_AUTH: return put_auth(c->data, c->lc);
         case INS_GET_AUTHS: return get_auths(c->p1);
+        case INS_PUT_ATTEST: return put_attest(c->data, c->lc);
+        case INS_GET_ATTESTATION: return get_attestation();
+        case INS_GET_LAST_ATTEST: return get_last_attest();
 #ifdef HAVE_NFC_READER
         case INS_TAP_TO_PAY: return io_send_sw(tap_start());
 #endif

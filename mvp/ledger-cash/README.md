@@ -18,13 +18,14 @@ Status (2026-10-10): **runs end to end in emulation.** `python demo.py` prints `
 It uses two Speculos Flex instances joined by an emulated NFC field and settles on anvil. Nothing has been run on a real
 device yet; see [What changes on real hardware](#what-changes-on-real-hardware) and the [hardware gates](#hardware-gates).
 The real-device checklists are in [HARDWARE.md](HARDWARE.md), and a 1-minute video of the emulated run is
-[video/ledger-cash-demo.mp4](video/ledger-cash-demo.mp4).
+[video/ledger-cash-demo.mp4](video/ledger-cash-demo.mp4). Rung v1 of the cash ladder, **attested IOUs**, also runs in
+emulation only: `python attest_demo.py` prints `ALL PASS` (see [Attested IOUs](#attested-ious-v1-emulated)).
 
 ```
  payer Flex (NFC reader)                         payee Ledger (NFC card emulation)
  ------------------------                        ---------------------------------
- LOAD_CASH 20 (on-screen OK)                     SET_REQUEST 5 "coffee" (on-screen OK)
- "Pay by tap" / TAP_TO_PAY                       home: "Receive 5 USDC to 0xB112...A72DB"
+ LOAD_CASH 20 (on-screen OK)                     SET_REQUEST 5 "coffee", or the on-device till
+ "Pay by tap" / TAP_TO_PAY                       home: "Waiting for tap: 5 USDC coffee / to 0xB112...A72DB"
  "Hold near the payee"   ---- field on ---->
    SELECT AID F04C45444745524341534801  ---->    9000
    GET_REQUEST E011                     ---->    request (157 B, signed by the payee)
@@ -35,8 +36,9 @@ The real-device checklists are in [HARDWARE.md](HARDWARE.md), and a 1-minute vid
    debit capped cash + record nonce (one NVM write)
    PUT_AUTH E023 + auth (161 B)         ---->    checks the auth (incl. low-s), stores it,
                                         <----    receipt (payee's signature over the auth)
- verifies receipt -> "Paid 5 USDC to 0x..."      "Signed IOU for 5 USDC from 0x... Not settled yet"
-                                                 (request consumed: GET_REQUEST now B006)
+ verifies receipt                                "Signed IOU for 5 USDC from 0x... Not attested"
+   PUT_ATTEST E025 + attestation (if armed) --->  checks it -> "... Attested: Ledger Cash 0.0.1"
+ "Paid 5 USDC to 0x..."                          (request consumed: GET_REQUEST now B006)
                                                  ... later, online: GET_AUTHS -> settle.mjs
                                                  -> USDC.transferWithAuthorization on-chain
 ```
@@ -56,8 +58,9 @@ lets ledger-cash derive no other key, and no stock Ledger chain app may derive t
 - **Remaining hole:** the OS path lock binds the key to whichever app declares the path, not to this app's code. The
   owner could sideload another app that declares `44'/1279476051'`, or import the recovery phrase into a software
   wallet, and sign with the cash key outside the cap. Closing that for a payee needs attestation (BOLOS endorsement,
-  rung v1 of the [Cash ladder](#cash-ladder-device-capped-iou-v0-to-escrowed-cash-v2)) plus escrow (v2). The path lock
-  is enforced by the device OS; the emulated runs show the derivation, not the lock.
+  rung v1 of the [Cash ladder](#cash-ladder-device-capped-iou-v0-to-escrowed-cash-v2), built in emulation only (see
+  [Attested IOUs](#attested-ious-v1-emulated); the code-hash binding is itself forgeable, so v1 is a negative result)) plus escrow (v2). The
+  path lock is enforced by the device OS; the emulated runs show the derivation, not the lock.
 
 ## Device-capped cash semantics (what the payer's secure element enforces)
 
@@ -81,14 +84,14 @@ that the other side is a Ledger, runs this app, or has any device-capped cash co
 - **What the signatures prove.** The request carries an EIP-191 signature by `payTo` over its first 92 bytes. The payer
   recovers it on the device and refuses the request if it does not recover to `payTo` (`B001`). That gives integrity
   in transit and binds the receipt to `payTo`; it does **not** say who the payee is, because anyone can sign a
-  request for their own address. So the payee's home screen shows its address (`Receive 5 USDC to 0xB112...A72DB`),
+  request for their own address. So the payee's home screen shows its address (`Waiting for tap: 5 USDC coffee / to 0xB112...A72DB`),
   and the payer must match it with the "To" on the review. The payee checks the auth's EIP-712 signature (low-s only,
   as USDC requires), `to`, value, `validBefore` and nonce before storing it, and signs a receipt. The payer verifies
   the receipt against `payTo` before it shows "Paid".
 - **The payee serves a request only while it is payable.** `GET_REQUEST` answers `B006` once the request is paid, after
   any new `SET_REQUEST` (even one rejected on screen) and after `SET_CONFIG`. A payer who taps a paid payee sees
   "Payee has no request" and nothing is signed or debited.
-- **Over NFC the app is only a payee card.** Only SELECT, `GET_REQUEST` and `PUT_AUTH` are accepted over NFC; every
+- **Over NFC the app is only a payee card.** Only SELECT, `GET_REQUEST`, `PUT_AUTH` and `PUT_ATTEST` are accepted over NFC; every
   other INS (balance and address, `PAY`, `LOAD_CASH`, `SET_CONFIG`, `TAP_TO_PAY`, `TAP_STATUS`, `GET_AUTHS`) answers
   `6D00`. A reader in range cannot read the balance or push a payment review onto an idle payer.
 
@@ -97,7 +100,10 @@ that the other side is a Ledger, runs this app, or has any device-capped cash co
 - **Any key can pay the payee in IOUs.** `PUT_AUTH` checks only that the EIP-712 signature recovers to the `from` the
   sender supplied. Any NFC phone or script can create a fresh key with no USDC, read `GET_REQUEST`, sign a matching
   auth and send it; the payee then shows "Signed IOU for 5 USDC", marks the request paid and returns a receipt. No
-  Ledger is needed. The screen says "IOU ... Not settled yet" for this reason, not "Received".
+  Ledger is needed. The screen says "IOU ... Not settled yet" for this reason, not "Received". Such an IOU also
+  shows "Not attested"; the v1 attestation (emulated, [Attested IOUs](#attested-ious-v1-emulated)) was meant to say it
+  came from this app's device-enforced cap, but that binding is forgeable by any app on the device, and even a real
+  attestation would not make the IOU funded.
 - **No offline solvency.** The loaded device-capped cash is **only a counter on the payer's device**. Nothing locks the
   USDC on-chain, so the payee **cannot check offline** that the cash account's on-chain balance still covers the
   authorization. The payer could have loaded more than the account holds, loaded the same seed's cash account on a
@@ -131,7 +137,7 @@ that the other side is a Ledger, runs this app, or has any device-capped cash co
 | Rung | What the payee holds | What makes it hold | Status |
 |---|---|---|---|
 | **v0: device-capped cash (this build)** | A payer-signed EIP-3009 IOU that settles later | The ledger-cash app refuses to sign more than the loaded balance from a cash account no stock Ledger chain app can sign for (dedicated derivation path), and debits before the signature leaves the chip. No escrow: the payee still cannot check on-chain solvency offline. | Runs end to end in emulation |
-| **v1: attested device-capped cash** | The same IOU, plus proof that it came from the genuine ledger-cash app | BOLOS endorsement signs over the running app's code hash, so a payee can check the IOU came from the capped app, not from any key or from another app that declares the same path. Still no escrow. | Speculos-only stretch, not built. Speculos gives every app the same fixed code hash (`src/bolos/endorsement.c:38`), so it shows the mechanism, not the binding; retail provisioning is untested (research/source-audit.md M01) |
+| **v1 (emulated): attested device-capped cash** | The same IOU, plus an attestation that it was signed inside the ledger-cash build the payee runs | BOLOS endorsement (slot 1) signs `sha256(keccak256(auth) \|\| running app code hash)`; the payee checks the endorsement key's certificate under a pinned certifier key and the signature under its own code hash, intended to tell an IOU from the capped app from one signed by any key or a modified build. Still no escrow. | Mechanism emulated; code-hash binding defeated by `key1_sign_without_code_hash` (PoC, `attest_demo.py` round 3) |
 | **v2: escrowed cash** | An attested note redeemable from on-chain escrow | "Load" locks USDC in a contract that releases it only to authorizations from that device key, so the note pays out without trusting the payer | Not built |
 
 Q&A, v0 device-capped cash: "What stops a payer spending the same loaded balance to two payees before either settles?
@@ -141,10 +147,107 @@ never exceeds what was loaded on it. The cash account's USDC is not locked: the 
 sign with the key outside ledger-cash (see [The cash account](#the-cash-account)), so an IOU can bounce at settlement.
 v2 closes that gap.
 
+## Attested IOUs (v1, emulated)
+
+What it adds: after a paid tap, the payer pushes one more APDU, `PUT_ATTEST`, so the payee can tell whether the IOU was
+signed inside the same ledger-cash build it runs, on a device whose endorsement key a pinned certifier has certified.
+It shows only that the IOU was debited from a ledger-cash counter. That counter is set by the owner on screen
+(`LOAD_CASH`) and is not tied to on-chain funds, so a payer can raise it at will; it limits double-signing of one
+loaded amount, not overspending. Only v2 escrow binds the cap to money. And the code-hash binding itself is
+forgeable by any app on the device (see the BOLOS calls below and `attest_demo.py` round 3), so v1 is a negative
+result. It does **not** make the IOU funded: an attested IOU can still bounce (no escrow, see
+[Honest limits](#honest-limits)).
+
+**The BOLOS calls** (SDK `include/os_endorsement.h` at the pinned `v27.1.2`; Speculos `src/bolos/endorsement.c`):
+- `sys_endorsement_key1_sign_data(data)` signs `sha256(data || code_hash)` with the slot-1 endorsement key, DER, up to
+  72 bytes. `code_hash` is the hash of the app that is **running**, filled in by the OS; but
+  `sys_endorsement_key1_sign_without_code_hash` (same slot-1 key, no code hash) lets any app on the device sign
+  `sha256(keccak256(auth) || any hash)`, so the code-hash binding is forgeable by any app on a provisioned device
+  (`attest_demo.py` round 3 builds exactly that forge and the genuine payee accepts it). ledger-cash signs
+  `data = keccak256(auth)` right after the EIP-712 signature and before the
+  debit is written (`att_sign`, in `pay_sign`), so a misbehaving endorsement call on a device cannot leave a debit
+  without an auth.
+- **Armed per app session.** The payer attests only after a `GET_ATTESTATION` (INS `32`, USB) answered `9000` since
+  the app was opened. Until then no endorsement syscall runs in the payment path, so an untested retail OS cannot
+  break v0 payments; `hw.py attest` is the one place a device first touches them. A standalone "Pay by tap" after an
+  app restart therefore does not attest until a host has sent `GET_ATTESTATION` once.
+- `sys_endorsement_get_public_key(1)` (65 bytes), `sys_endorsement_get_public_key_signature(1)` (DER) and
+  `sys_endorsement_get_code_hash()` (32 bytes).
+- The certificate an app can read is the **Owner certificate**: a signature by the key that ran `endorsementSetup`
+  over `sha256(0xFE || endorsement_pub)` (ledgerblue `endorsementSetup.py`; Speculos `env_init_user_certificate`
+  signs exactly that with its `ATTESTATION_PRIVATE_KEY`).
+
+**Wire format** (cash.c header): `attestation = pub 65 | certLen 1 | cert | codeHash 32 | sigLen 1 | sig`, at most
+243 bytes. `PUT_ATTEST` is 5 + 243 = 248 bytes at most (command direction; the 271-byte limit is on replies).
+
+**What the payee checks** (`att_verify`): the cert verifies under `CERTIFIER` (a constant in cash.c); the sig verifies
+under the sent key over `sha256(keccak256(last stored auth) || the payee's own code hash)`. The payee's own hash is
+the pin, because a build cannot contain its own hash. So payer and payee must run the **same build on the same model**
+(the hash covers the target id; a Flex payer and a Nano S Plus payee never attest each other, nor do two versions).
+The upgrade is a "trust this build" APDU approved on screen; not built. The result is shown on the payee's IOU screen
+("Attested: Ledger Cash 0.0.1" or "Not attested"; Nano: "Attested" / "Not attested") and kept in RAM for
+`GET_LAST_ATTEST`. `PUT_AUTH` shows "Not attested" until a `PUT_ATTEST` for that auth verifies; a later
+`PUT_ATTEST` that does not verify (any reader in range can send one) gets `B00A` and does not erase a verified record.
+Everything is optional: a v0 payee answers `6D00` to `PUT_ATTEST` and the payer still ends the tap as PAID; an
+unarmed payer, or one without a provisioned slot, sends nothing, and the tap is the v0 tap byte for byte.
+
+**Offline check.** `python attest/verify_attestation.py iou.json --codehash app/build/flex/bin/app.sha256` (needs only
+`cryptography` and `eth_utils`) takes `{"auth": hex, "attestation": hex}` (from `GET_LAST_ATTEST` on either device)
+and prints ATTESTED (exit 0) or NOT ATTESTED (exit 1). It pins the published build's `app.sha256` and never trusts
+the `codeHash` inside the blob; when the signature verifies only with that claimed hash it says the IOU was signed
+inside a different build.
+
+**Emulation.** Stock Speculos returns one fake code hash (`"12345678abcdef0000fedcba8765432"`, 32 bytes with the NUL)
+for every app, so it cannot tell builds apart. `attest/speculos_codehash.py` copies the Speculos launcher with those
+32 bytes replaced by the build's `app.sha256` (the hash `ledgerblue.loadApp` prints and the device shows at install)
+and starts Speculos on the copy, one copy per instance. `attest_demo.py` runs three rounds, one container each:
+1. genuine payer -> genuine payee: `GET_ATTESTATION` on both returns the endorsement key, a cert that verifies, and a
+   code hash equal to `app.sha256` (and arms the payer); a 25 USDC request over a 20 USDC load is refused (`B003`);
+   a 5 USDC tap is paid and the payee shows "Certified device key"; the offline verifier says ATTESTED. A
+   broken `PUT_ATTEST` sent afterwards over NFC gets `B00A` and the record stays verified; `GET_ATTESTATION` and
+   `GET_LAST_ATTEST` over NFC are `6D00`.
+2. a **cheating payer** (the same source with the one cap-check line deleted, built by the demo into
+   `app/build/cheat/flex`) -> genuine payee: it signs 25 USDC over a 20 USDC load and the payee stores the IOU (the
+   EIP-712 signature is valid), but the payee shows "Not attested" and the verifier says NOT ATTESTED ("signed inside
+   a different build"). Replaying round 1's genuine attestation onto this IOU gets `B00A`. (An attestation never
+   bounds spending either: the cap is whatever the owner loaded on screen, not on-chain funds, so even a genuine
+   build can attest an IOU above its real balance by loading more. Only v2 escrow binds the cap to money.)
+3. a **forging payer** (cap deleted *and* `att_sign` swapped to `sys_endorsement_key1_sign_without_code_hash` over
+   `keccak256(auth) || the genuine build's app.sha256`, built by the demo into `app/build/forge/flex`) -> genuine
+   payee: the payee shows "Certified device key" (state 2) and the offline verifier says ATTESTED for a 25 USDC IOU
+   over a 20 USDC load. The slot-1 key signs a hash of any preimage the app picks, so the code-hash binding is
+   forgeable by any app on a provisioned device, on retail too (this is the real BOLOS syscall, not Speculos's public
+   keys). v1 is a negative result: it needs an OS-level fix before it can protect a shop (see DX-FEEDBACK).
+
+`demo.py` and `till_demo.py` never send `GET_ATTESTATION`, so their payer does not attest and their taps are the v0
+taps (the payee shows "Not attested"). `app/test_nano.py` uses the patched launcher, arms the payer and forwards the
+attestation over USB (a Nano has no NFC).
+
+**What is emulated, and what retail needs** (none of this has been run on a device):
+- In Speculos the endorsement key is `USER_PRIVATE_KEY` (default `e15e01d4...`, the same in every instance) and the
+  certifier is `ATTESTATION_PRIVATE_KEY` (default `138fb9b9...`, public in Speculos's source). `CERTIFIER` in cash.c is
+  that default's public key, so **anyone can forge an emulated attestation**; the emulation shows the mechanism and the
+  binding to the code hash, not genuine hardware.
+- On a retail device slot 1 is **not provisioned** until someone runs `ledgerblue.endorsementSetup` over the
+  dashboard's secure channel (APDUs `E0 C0` to generate the key, which returns it signed by the device key over
+  `sha256(0xFF || pub)`, then `E0 C2` to store the Owner certificate). Per research/source-audit.md M01 this is
+  verified only on Nano X firmware 2.2.3 (2023); there is no reset instruction, so it is probably **one write per
+  slot**, and the stock script checks a Ledger Blue-era issuer key and will likely fail on a Flex or Nano S Plus.
+  **Do not run it on Sahas's Nano S Plus or the collaborator's Flex without their explicit decision.** Until then
+  `GET_ATTESTATION` answers `B00A` and taps work as v0 (`python hw.py attest` checks this read-only).
+- **Genuine hardware is not proven by the app alone.** The device-key link (the `E0 C0` reply, and the device
+  certificate from the issuer, Ledger's batch key, `E0 52`) is visible only at provisioning time, never to the app.
+  For "on a genuine Ledger", the certifier must check that chain at setup before signing the Owner certificate, and
+  publish the `E0 C0` reply. Who that certifier is for retail (the project, Ledger, the payee) is open. `CERTIFIER`
+  must then be replaced in cash.c, which changes the build hash.
+- Whether `sys_endorsement_get_code_hash` on a device equals `app.sha256` is untested (both come from the same
+  `createApp` parameters and image per ledgerblue `hashApp.py`, but nobody has compared them on a device).
+- The payee keeps the attestation in RAM only (lost on app exit); export it with `GET_LAST_ATTEST` before settling.
+
 ## Protocol
 
 All APDUs use CLA `E0` and big-endian fixed fields; P1 = P2 = 0 unless stated. Values are USDC base units (6 decimals).
-"USB" in the link column means any host link (USB or BLE); over NFC only the three NFC rows are accepted.
+"USB" in the link column means any host link (USB or BLE); over NFC only the four NFC rows are accepted.
 
 | INS | Name | Who / link | Data in | Data out | Screen |
 |---|---|---|---|---|---|
@@ -152,13 +255,16 @@ All APDUs use CLA `E0` and big-endian fixed fields; P1 = P2 = 0 unless stated. V
 | `12` | SET_CONFIG | both, USB | chainId u64, token 20 | none | Approve: "Set USDC network". Approval drops a pending request |
 | `20` | LOAD_CASH | payer, USB | value u64 | none | Approve: "Load X USDC as cash" |
 | `21` | GET_BALANCE | both, USB | none | balance u64, payCounter u32, address 20 | none (also allowed while a screen is up) |
-| `10` | SET_REQUEST | payee, USB | value u64, label of up to 24 printable ASCII bytes | none | Approve; home becomes "Receive X to 0xB112...A72DB". Once it reaches the screen it drops the pending request, even if rejected |
+| `10` | SET_REQUEST | payee, USB | value u64, label of up to 24 printable ASCII bytes | none | Approve; home becomes "Waiting for tap: X label / to 0xB112...A72DB" with a "Cancel request" button. Once it reaches the screen it drops the pending request, even if rejected. The on-device till (below) builds the same request |
 | `11` | GET_REQUEST | payee, NFC or USB | none | request (157) while one is payable, else `B006` | none |
 | `22` | PAY | payer, USB | request (157) | auth (161) | review, then Hold to sign (USB path, stage B) |
 | `23` | PUT_AUTH | payee, NFC or USB | auth (161) | `01`, receipt r32 s32 v1 (66) | "Signed IOU for X from 0x... Not settled yet" |
 | `24` | GET_AUTHS | payee, USB | P1 = slot 0..7 | auth (161) | none |
+| `25` | PUT_ATTEST | payee, NFC or USB (the payer sends it after a verified receipt) | attestation (<= 243, format in [Attested IOUs](#attested-ious-v1-emulated)) for the last stored auth | none: `9000` verified, `B00A` not | IOU screen line becomes "Attested: Ledger Cash 0.0.1" or stays "Not attested" |
 | `30` | TAP_TO_PAY | payer, USB (or the home button "Pay by tap") | none | none; `9000` = reader armed | "Hold near the payee" (Cancel) |
 | `31` | TAP_STATUS | payer, USB | none | state u8, sw u16, last tap auth (161 bytes, zeros if none) | none (also allowed while a screen is up) |
+| `32` | GET_ATTESTATION | both, USB | none | endorsement pub 65, certLen 1, cert, code hash 32; `B00A` if slot 1 is not provisioned. A `9000` arms attestation of this payer's payments until the app closes | none |
+| `33` | GET_LAST_ATTEST | both, USB | none | state u8 (0 none, 1 signed by this payer, 2 received and verified, 3 received, not verified), attestation | none |
 
 Wire formats:
 - **request (157):** chainId u64 @0, token 20 @8, payTo 20 @28, value u64 @48, validBefore u64 @56, reqNonce u32 @64
@@ -168,6 +274,21 @@ Wire formats:
   verifyingContract token}. v is 27/28 and s is at most n/2 (the payer produces low-s; the payee refuses high-s).
   Settle it with `transferWithAuthorization(from, to, value, validAfter, validBefore, nonce, v, r, s)`.
 - **receipt:** the payee's `personal_sign(keccak256(auth))`, as r||s||v.
+- **settlement QR (Flex payee, display only):** `lcash:` + base64url without padding of from 20, to 20, value u64,
+  nonce 32, v 1, r 32, s 32 (145 bytes, 200 characters in all). validAfter (0) and validBefore (2^64-1) are left out:
+  the payee stores only auths with those values. The full 161 bytes would not fit the ~213-byte QR budget (hex is 322
+  characters, base64 216). `python hw.py qr "lcash:..." file.json` turns it back into `settle.mjs` input.
+
+**On-device till.** The payee can build the request on its own screen instead of over USB. Flex: settings wheel (top
+right of the home; the home has one action button, which stays "Pay by tap") -> **Request payment** -> keypad "Amount
+in USDC" -> keypad "Cents (0 if none)" -> label (Coffee, Food, Groceries, Transport, Gift, Other) -> "Request X USDC /
+For: label" Approve. The result is exactly a SET_REQUEST request (same signing code); no APDU is answered. While it is
+pending the home shows "Waiting for tap: X label / to 0x..." and **Cancel request**. After a paid PUT_AUTH the payee
+shows "Signed IOU for X from 0x... Not settled yet"; `nbgl_useCaseStatus` success already plays the SDK success tune
+(`TUNE_LEDGER_MOMENT`) when the device's sound setting allows it, so the till adds no tune code. The settings wheel also
+has **Show settlement QR** (latest stored auth, format above). Nano S Plus: the home action is **Request payment** (or
+**Cancel request**), with the same keypads (button-driven) and label list, no QR. `till_demo.py` drives the Flex till
+end to end (`screens/till/`); `app/test_nano.py` drives the Nano one.
 
 TAP_STATUS states: 0 idle, 1 waiting for a card, 2 busy (reading or review on screen), 3 auth sent, 4 **paid** (receipt
 verified), 5 **failed, nothing paid**, 6 **signed, no receipt** (debited; the auth is in the reply).
@@ -183,6 +304,7 @@ Status words: `9000` ok, `6985` rejected on screen, `6700` wrong length, `6A80` 
 - `B007` busy (a screen is up)
 - `B008` tap: card left the field
 - `B009` tap: payee did not answer in time
+- `B00A` not attested: endorsement slot 1 not provisioned (GET_ATTESTATION), or a PUT_ATTEST that does not verify
 - `B0FF` crypto failure
 
 NFC size budget: replies over 271 bytes are dropped by the reader stack (research/nfc-reader-mode.md §1.3). The
@@ -193,6 +315,7 @@ largest messages fit without splitting:
 | GET_REQUEST reply | 157 + SW = 159 bytes |
 | PUT_AUTH command | 5 + 161 = 166 bytes |
 | receipt | 66 + SW = 68 bytes |
+| PUT_ATTEST command | 5 + 243 = 248 bytes at most (246 in `attest_demo-run.log`: two 71-byte DER signatures) |
 
 Both GET_REQUEST and PUT_AUTH cross the 158-byte Ledger-protocol chunk, so the multi-chunk path is exercised in both
 directions.
@@ -222,6 +345,10 @@ MSYS_NO_PATHCONV=1 docker run --rm --memory 1g --name lc-i-build -v "$(pwd -W)/a
 (cd settle && npm i)
 # 3. the demo (about 1 minute once the images are pulled)
 python demo.py
+# 4. optional: the on-device till (payee keypad -> label -> tap -> QR; same ports, no anvil; needs opencv-python)
+python till_demo.py
+# 5. optional: attested IOUs (v1, emulated; same ports, no anvil; builds the cheating payer once; needs cryptography)
+python attest_demo.py
 ```
 
 `demo.py` runs in three phases, one container each:
@@ -256,7 +383,7 @@ Screenshots of both screens at every step go to `screens/` (`NN-<payer|payee>-<s
 
 | Screenshot | Shows |
 |---|---|
-| `*-payee-ready` | "Receive 5 USDC to 0xB112...A72DB" |
+| `*-payee-ready` | "Waiting for tap: 5 USDC coffee / to 0xB112...A72DB", "Cancel request" |
 | `*-payer-tap1-hold-near` | "Hold near the payee" |
 | `*-payer-tap1` | the review pages: Pay / To / For / Cash left after, then Hold to sign |
 | `*-payer-tap1-end` / `*-payee-tap1-end` | "Paid 5 USDC to 0xB112..." / "Signed IOU for 5 USDC from 0x46CE... Not settled yet" |
@@ -270,7 +397,8 @@ anvil chainId 31337.
 
 ## Recorded demo output
 
-`python demo.py`, 2026-10-10, one run (the hex lines are the APDUs on the emulated field). The reqNonce is random, so
+`python demo.py`, 2026-10-10, one run (the hex lines are the APDUs on the emulated field), re-recorded on the attested
+IOU build: the payer is never armed here, so the taps are the v0 taps (no `E025`). The reqNonce is random, so
 the request, signature, nonce and settlement tx hex differ on every run. The bracketed `[payer]`/`[payee]` screen-text
 lines also vary: whether the home-screen text is still in the Speculos event buffer depends on timing. Every assert,
 status word, balance and address is the same on every run.
@@ -293,13 +421,13 @@ status word, balance and address is the same on every run.
     reader > card 00a404000cf04c45444745524341534801
     reader < card 9000
     reader > card e011000000
-    reader < card 0000000000007a695fbdb2315678afecb367f032d93f642f64180aa3b1124942ba3ceb48d87dac9babc50ca3b50a72db00000000004c4b40ffffffffffffffffbc1a9d4d636f66666565000000000000000000000000000000000000613adbc3953d62c4cd69223d34b66b243f47f1cbd8ee4e69808711f16c6098cb5c1a2fbae6e94cbf4429b28e4ea67069ddf2c576c9254870f96bcb2c15b750611b9000
+    reader < card 0000000000007a695fbdb2315678afecb367f032d93f642f64180aa3b1124942ba3ceb48d87dac9babc50ca3b50a72db00000000004c4b40fffffffffffffffff5f92684636f6666656500000000000000000000000000000000000085dcff45bd859503d27a765ad19262e939883a3df24e71ced788de2d4718bd5b1c1bb50f666cd385b1e09c6d221cd2a7901ad5c84f9abd214cb8e0f843d9a6921c9000
   [payer screen] Reading request | Pay with | USDC cash | Swipe to review | Reject | 1 of 4
   [payer screen] Pay | 5 USDC | To | 0xB1124942BA3CEB48 | D87DAC9BABC50CA3B | 50A72DB | For | coffee | Reject | 2 of 4
   [payer screen] Cash left after | 15 USDC | Reject | 3 of 4
   [payer screen] Pay 5 USDC? | Reject | 4 of 4 | Hold to sign
-    reader > card e0230000a146ce8565dd320e3764aa33cbda7024f469132354b1124942ba3ceb48d87dac9babc50ca3b50a72db00000000004c4b400000000000000000ffffffffffffffff555d037bbd06edae5804ab22adb24caf51c893a6b55569a2fa7f702739ff9c471bda6c5f5be6b5310dd18064c6d70a1be285f5b5eee38fd087c4f1d771e10a828d3e705c0be98473c088560a8f1151e09b7ba9290d5cc8a24296867c183806feee
-    reader < card 014bfff3712a1bc66514f78f78119f68fceefc6b02b68d9b9aa2baa90c841e43bc696a39775b3454adc06780e3fe780b27ca4ee25413e7526de1613ab20a6898221b9000
+    reader > card e0230000a146ce8565dd320e3764aa33cbda7024f469132354b1124942ba3ceb48d87dac9babc50ca3b50a72db00000000004c4b400000000000000000ffffffffffffffffb6ea5ad1684fb8ab8593a08160e3b97ada6638a23852696760fecb009d1a85ab1c2f2c4652a5207407b6c6f238a14b807bae90d390c3910d4a52cb0852ab919e4b5ea3a2b3ad6b112ecd6c88043a0d9a972db80c7a31fa830f813a2e54fb831560
+    reader < card 01ce3ad32a361bf004442c903b23cfc5aa11b0d7972118dcc2d79c56e9403ba50a46ba1451b2af1c3ba5256da26bdd95403274bf8c0d0b3d97946f99d2ebdfec041c9000
   tap: card removed after 3 APDU(s)
   TAP_STATUS PAID sw 9000   payer screen: Sending payment | Paid 5 USDC | to  | 0xB1124942BA3CEB48 | D87DAC9BABC50CA3B | 50A72DB
   PAID: payer cash 20 -> 15, payee holds the auth (EIP-712 recovers to payer), receipt verified on the payer
@@ -320,7 +448,7 @@ status word, balance and address is the same on every run.
     reader > card 00a404000cf04c45444745524341534801
     reader < card 9000
     reader > card e011000000
-    reader < card 0000000000007a695fbdb2315678afecb367f032d93f642f64180aa3b1124942ba3ceb48d87dac9babc50ca3b50a72db00000000002dc6c0ffffffffffffffffa0584283746561000000000000000000000000000000000000000000d878fa9836f01456fe55a522a60121a2aa673abd62f2358c994af60cea7b122125bc714919fd264d4a0575fd0bbe0f1aa614e0f69b90cc73f3577467caa9087f1c9000
+    reader < card 0000000000007a695fbdb2315678afecb367f032d93f642f64180aa3b1124942ba3ceb48d87dac9babc50ca3b50a72db00000000002dc6c0ffffffffffffffffab017284746561000000000000000000000000000000000000000000b3539a130781b8c8856c29a844c30e12a00e90f47f998f8febdbc15bc82e2ae907c00025559bd0041ae7283e86e5629e39dc2f2e2339c2ffeebaf94904d531851c9000
   [payer screen] Reading request | Pay with | USDC cash | Swipe to review | Reject | 1 of 4
   (payee pulled away while the review is on screen)
   tap: card removed after 2 APDU(s)
@@ -331,12 +459,12 @@ status word, balance and address is the same on every run.
     reader > card 00a404000cf04c45444745524341534801
     reader < card 9000
     reader > card e011000000
-    reader < card 0000000000007a695fbdb2315678afecb367f032d93f642f64180aa3b1124942ba3ceb48d87dac9babc50ca3b50a72db00000000002dc6c0ffffffffffffffffa0584283746561000000000000000000000000000000000000000000d878fa9836f01456fe55a522a60121a2aa673abd62f2358c994af60cea7b122125bc714919fd264d4a0575fd0bbe0f1aa614e0f69b90cc73f3577467caa9087f1c9000
+    reader < card 0000000000007a695fbdb2315678afecb367f032d93f642f64180aa3b1124942ba3ceb48d87dac9babc50ca3b50a72db00000000002dc6c0ffffffffffffffffab017284746561000000000000000000000000000000000000000000b3539a130781b8c8856c29a844c30e12a00e90f47f998f8febdbc15bc82e2ae907c00025559bd0041ae7283e86e5629e39dc2f2e2339c2ffeebaf94904d531851c9000
   [payer screen] Reading request | Pay with | USDC cash | Swipe to review | Reject | 1 of 4
   [payer screen] Pay | 3 USDC | To | 0xB1124942BA3CEB48 | D87DAC9BABC50CA3B | 50A72DB | For | tea | Reject | 2 of 4
   [payer screen] Cash left after | 12 USDC | Reject | 3 of 4
   [payer screen] Pay 3 USDC? | Reject | 4 of 4 | Hold to sign
-    reader > card e0230000a146ce8565dd320e3764aa33cbda7024f469132354b1124942ba3ceb48d87dac9babc50ca3b50a72db00000000002dc6c00000000000000000ffffffffffffffff4ca3f8dae88cfd8146e3a76f788042dd0c6c933c16030de82bde1167de6b84ed1c84c529de672d0b07d1ef2805678598193ab4820878883b1ef95305386e4a8c9f42f169e59cf204672794ec812f673073ee49992468a9ffb17ad72664b9f01d08  (card pulled away, not delivered)
+    reader > card e0230000a146ce8565dd320e3764aa33cbda7024f469132354b1124942ba3ceb48d87dac9babc50ca3b50a72db00000000002dc6c00000000000000000ffffffffffffffff65c92130d8742edd1bcc8ecbbd0e9b9f67aff2f43b06fe5d04c7b2f62b4788981b978b5d67e33250cf46a3a72aa8feb37879739f8f0de52ca3579ae5c3cd5393f04ae7219a799c8e48ca3b1fb958a8a4ba57dd77971a854cfd830b606da58c1213  (card pulled away, not delivered)
   tap: card removed after 2 APDU(s)
   TAP_STATUS SIGNED_NO_RECEIPT sw B008   payer screen: Sending payment | Signed 3 USDC | Card left after signing | Cash debited, no  | receipt
   SIGNED, NO RECEIPT: cash 15 -> 12 (debit before release), auth kept on the payer (TAP_STATUS)
@@ -348,12 +476,12 @@ status word, balance and address is the same on every run.
   balances before:
   0x46cE8565DD320e3764aa33cbdA7024F469132354 100.000000 USDC
   0xb1124942BA3CeB48d87Dac9baBc50ca3B50A72db 0.000000 USDC
-  #0 success tx 0x9b0a092a816060bdbf13d7ee94dd2a2ddca687d70b120b145314b144a80af39d value 5.000000 USDC nonce 0x555d037bbd06edae5804ab22adb24caf51c893a6b55569a2fa7f702739ff9c47
+  #0 success tx 0xa1bc85cd32c2e06a29c7f84f7e0e5378412867442df215b253828237fdbd5b02 value 5.000000 USDC nonce 0xb6ea5ad1684fb8ab8593a08160e3b97ada6638a23852696760fecb009d1a85ab
      from 0x46cE8565DD320e3764aa33cbdA7024F469132354 100.000000 USDC -> 95.000000 USDC
      to   0xb1124942BA3CeB48d87Dac9baBc50ca3B50A72db 0.000000 USDC -> 5.000000 USDC
   0x46cE8565DD320e3764aa33cbdA7024F469132354 95.000000 USDC
   0xb1124942BA3CeB48d87Dac9baBc50ca3B50A72db 5.000000 USDC
-  #0 REJECTED already used nonce 0x555d037bbd06edae5804ab22adb24caf51c893a6b55569a2fa7f702739ff9c47
+  #0 REJECTED already used nonce 0xb6ea5ad1684fb8ab8593a08160e3b97ada6638a23852696760fecb009d1a85ab
 ALL PASS
 ```
 
@@ -398,19 +526,25 @@ These are not verified, and each one can break the real-device path. The order f
 5. **Timing.** The emulated field never drops during a 10-20 s review. Does a real field stay up while the payer
    reads the screen and holds to sign? If not, the flow must read the request, drop the field, review, then tap
    again to deliver PUT_AUTH.
-6. **Size.** 159 and 166 bytes worked in emulation. The real limit is the 271-byte SEPH buffer, which this flow stays
-   under.
+6. **Size.** 159, 166 and (PUT_ATTEST) 246 bytes worked in emulation. The real limit is the 271-byte SEPH buffer,
+   which this flow stays under; a 248-byte command over a real field is untested.
 7. **Media on a device.** The NFC allowlist keys on `G_io_app.apdu_media == IO_APDU_MEDIA_NFC`, which the SDK sets for
    every received APDU (`io_legacy/src/os_io_legacy.c`). In emulation, card APDUs arrive as NFC and host APDUs as USB;
    on a device the same is expected but not yet seen.
+8. **Endorsement slot.** Attested IOUs need slot 1 provisioned (see [Attested IOUs](#attested-ious-v1-emulated)): an
+   untested, probably one-shot step, only with the device owner's explicit decision. Without it taps stay v0.
 
 ## Files
 
 | Path | What |
 |---|---|
 | `demo.py` | The one-command end-to-end demo (asserts every step). |
+| `till_demo.py` | The on-device till on the Flex payee (keypad, label, tap, settlement QR, cancel); screens in `screens/till/`. |
+| `attest_demo.py` | Attested IOUs (v1, emulated): genuine payer -> "Attested", cheating build -> "Not attested"; screens in `screens/attest/`, exported IOUs in `attest/iou-*.json`. |
+| `attest/` | `verify_attestation.py` (offline verifier), `speculos_codehash.py` (Speculos with the ELF's real code hash). |
 | `app/src/cash.c` | The whole device app (payer and payee, USB and NFC). `app/test.py` is the stage-B USB test. |
 | `speculos-nfc/` | Patched `seproxyhal.py` (NFC reader emulation, plus a USB host link on a `--transport NFC` instance), `relay.py` (the field; `tap(stop=, cut_ins=)`, `card_exchange()`), stage-A checks. |
+| `interop/android_payee_tap.py` | Gate 2 in emulation: a Speculos Flex payer taps the Android payee logic (`mvp/android/core`, `InteropMain`), byte for byte, and settles on anvil. Records the transcript CI replays. See NOTES.md, "Interop". |
 | `settle/` | USDC look-alike (`src/USDC.sol`), `deploy.mjs`, `fund.mjs`, `settle.mjs`, `balances.mjs`, stage-C test. |
 | `auths.json` | What the payee handed over in the last demo run (input to `settle.mjs`). |
 | `screens/` | Screenshots of both devices from the last demo run. |

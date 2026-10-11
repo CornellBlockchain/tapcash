@@ -41,12 +41,12 @@ object Eth {
         error("no recovery id") // ponytail: r >= p (recovery id 2/3) has probability ~2^-127, not handled
     }
 
-    /** 20-byte signer address, or null. Accepts v in {0,1,27,28}; rejects high s like USDC.sol. */
+    /** 20-byte signer address, or null. Accepts v in {27,28} only and rejects high s, like USDC.sol and cash.c's ecrecover. */
     fun recover(hash: ByteArray, sig: ByteArray): ByteArray? {
         if (sig.size != 65 || hash.size != 32) return null
         val r = BigInteger(1, sig.copyOfRange(0, 32))
         val s = BigInteger(1, sig.copyOfRange(32, 64))
-        val recId = when (sig[64].toInt() and 0xff) { 0, 27 -> 0; 1, 28 -> 1; else -> return null }
+        val recId = when (sig[64].toInt() and 0xff) { 27 -> 0; 28 -> 1; else -> return null }
         if (r.signum() == 0 || r >= CURVE.n || s.signum() == 0 || s > HALF_N) return null
         val rPoint = try {
             CURVE.curve.decodePoint(byteArrayOf((2 + recId).toByte()) + u256(r))

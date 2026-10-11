@@ -1,7 +1,8 @@
 package ledgercash
 
 // ALL ledger-cash APDU constants and wire layouts live in this file. Re-sync with mvp/ledger-cash/app/src/cash.c when it changes.
-// Synced against cash.c as of 2026-10-10 19:52:36 local (see NOTES.md, "Sync with the C app").
+// Synced against cash.c's attestation build (Flex app.sha256 69873224...2acdb; see NOTES.md, "Sync with the C app").
+// Sync check: python -u mvp/ledger-cash/interop/android_payee_tap.py (Speculos Flex payer vs Payee.handle; re-records InteropVectors.kt).
 object Protocol {
     const val CLA = 0xE0
     val AID = Hex.decode("F04C45444745524341534801")      // F0 "LEDGERCASH" 01 (cash.c answers this SELECT 9000, else 6A82; its reader sends it first)
@@ -9,6 +10,7 @@ object Protocol {
     const val INS_GET_REQUEST = 0x11
     const val INS_SET_CONFIG = 0x12    // chainId u64 || token 20; approved on the device screen
     const val INS_PUT_AUTH = 0x23
+    const val INS_PUT_ATTEST = 0x25    // v1, not implemented by the phone payee: answers 6D00, payer still ends PAID
     // Payer-side / host-only INS (not used by this app, listed so the set matches cash.c):
     const val INS_LOAD_CASH = 0x20     // value u64; approved on the device screen
     const val INS_GET_BALANCE = 0x21   // -> balance u64 || pay_counter u32 || address 20

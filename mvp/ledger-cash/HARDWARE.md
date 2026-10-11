@@ -32,6 +32,7 @@ for help. It was tested against emulated devices (2026-10-11):
 | `hw.py auths [file]` | Reads the payee's stored auths (GET_AUTHS) into a JSON file for `settle.mjs`. The default file is `device-auths.json`. |
 | `hw.py tap` | **Flex only.** Sends TAP_TO_PAY, then polls TAP_STATUS and prints every state change until the tap ends. |
 | `hw.py status` | **Flex only.** Sends one TAP_STATUS. If an auth was signed, it is also written to `tap-auth.json`. |
+| `hw.py attest` | **Read-only.** GET_ATTESTATION and GET_LAST_ATTEST (attested IOUs, README "Attested IOUs"). On a retail device expect `SW B00A` (endorsement slot 1 not provisioned); then every tap and selfpay works as before, unattested. Never run `ledgerblue.endorsementSetup` to change that without the device owner's explicit decision: it is untested and probably one-shot. |
 | `hw.py raw <hex>` | Sends any APDU. |
 
 **TAP_STATUS states:** 0 idle, 1 waiting for card, 2 busy, 3 PUT_AUTH sent, 4 PAID, 5 FAILED, 6 SIGNED BUT NO RECEIPT.
@@ -74,8 +75,8 @@ API 24 and gives `0x511F`). Built with the pinned image
 
 | Device | Artifact | `app.sha256` (contents of the file) | targetId |
 |---|---|---|---|
-| Flex | `ledger-cash-flex` | `9c8cfe79ceb043e3ef728eaa12f117e8a17d92e35cb639be3fb0a0887bfbcd57` | `0x33300004` |
-| Nano S Plus | `ledger-cash-nanosplus` | `4733ab55e296422951864ea7843e98f723a47004c7295c1f42cd48faa1fa10de` | `0x33100004` |
+| Flex | `ledger-cash-flex` | `69873224e9a205cbff4b5a40ec22846dba9f2a7caded36738c3d781be2a2acdb` | `0x33300004` |
+| Nano S Plus | `ledger-cash-nanosplus` | `63e3c196dfc9b01c8e32747a29e299af903c849790f945fa7a983c5303bf7bb9` | `0x33100004` |
 
 The CI workflow `device-apps` (GitHub Actions, job `ledger-cash`) builds both on every push to `ledger-cash` that
 touches `mvp/ledger-cash/app/**` (or the workflow file); the push that adds the dedicated cash path touches both, so it
@@ -171,7 +172,7 @@ Use one of these, in this order:
    ```powershell
    Get-Content mvp\ledger-cash\app\build\nanos2\bin\app.sha256
    ```
-   Expected: `4733ab55e296422951864ea7843e98f723a47004c7295c1f42cd48faa1fa10de`.
+   Expected: `63e3c196dfc9b01c8e32747a29e299af903c849790f945fa7a983c5303bf7bb9`.
 2. **The CI artifact**, once A0.2 is green:
    ```powershell
    gh run download -R Sahas266/ledger-op3n-n3xt-hackathon-26 -n ledger-cash-nanosplus -D $HOME\lc-nanosplus
@@ -242,7 +243,8 @@ cd "C:\Users\sahas\Github Repos\ledger-op3n-n3xt-hackathon-26\mvp\ledger-cash"
    - Expected output: `SW 9000` twice, then `cash 10 USDC`.
 4. **`hw.py selfpay 5 coffee`.** The Nano plays both roles.
    - Payee pages, the same as screenshots 17-20: "Request 5 USDC", then "Request 5 USDC | For: coffee", then
-     **Approve**. The home screen then reads "Receive 5 USDC to 0x…" (screenshot 21).
+     **Approve**. The home screen then reads "Waiting for tap: | 5 USDC coffee | to 0x…" (screenshot 21); the next
+     home page is **Cancel request** (do not press it here).
    - Payer pages, the same as screenshots 30-36:
      1. "Pay with USDC cash"
      2. "Pay | 5 USDC"
@@ -252,7 +254,8 @@ cd "C:\Users\sahas\Github Repos\ledger-op3n-n3xt-hackathon-26\mvp\ledger-cash"
      5. "Cash left after | 5 USDC"
      6. **"Pay 5 USDC?"**: press both buttons to sign. There is no hold-to-sign on the Nano.
      7. "Transaction signed"
-   - Then the PUT_AUTH status, the same as screenshot 37: "IOU 5 USDC from | 0x….. | Not settled yet".
+   - Then the PUT_AUTH status, the same as screenshot 37: "IOU 5 USDC from | 0x….. | Not attested | Not settled yet"
+     ("Not attested" is expected: the endorsement slot is not provisioned, so `selfpay` sends no attestation).
    - Expected output:
      - `receipt ok`;
      - the second PAY gives `SW B004 already paid`;
@@ -261,6 +264,24 @@ cd "C:\Users\sahas\Github Repos\ledger-op3n-n3xt-hackathon-26\mvp\ledger-cash"
    "Pay 1 USDC?" to **"Reject transaction"** and press both buttons, as in screenshots 22-29. Expected: PAY gives
    `SW 6985 rejected on device`, and the next `hw.py balance` still shows 5 USDC and counter 1.
 6. **`hw.py auths nano-auths.json`.** Expected: `1 auth(s) -> nano-auths.json`, and slot 1 gives `6A88`.
+7. **On-device till (optional, 3 min, `screens/nano/38-45`).** On the home, press right to **Request payment**, both
+   buttons. Keypad "Amount in USDC": the row is `<del> 0..9 <ok>`, the cursor starts on 5; move to 3, both buttons,
+   then the cursor sits on `<ok>`: both buttons. "Cents (2 digits)": the keypad row is `<del> 0..9` (no validate
+   key); the cursor starts on 5 and resets to 5 after each digit. Enter 0 (5 left, both), then 0 again (5 left,
+   both), then both once more to confirm 00 cents. "Payment for | Coffee":
+   both. Then right to **Approve**, both. Home: "Waiting for tap: | 3 USDC Coffee | to 0x…". Then
+   `hw.py selfpay till` pays that request from the same Nano (review "Pay 3 USDC?", For Coffee) and ends with the
+   "IOU 3 USDC from … Not settled yet" status (`cash 2 USDC, pay counter 2`; this self-paid auth lands in slot 1,
+   A8 settles only the file from step 6). Or press right to **Cancel request**, both: "Request cancelled", and
+   `hw.py raw E011000000` gives `B006`.
+
+8. **Attestation probe (read-only, 1 min).** `& $py hw.py attest`. Expected: `SW B00A not attested / endorsement
+   slot not provisioned` for GET_ATTESTATION, then `last IOU attestation state 0`. Record the SW in A10. If it
+   answers `9000` instead, the slot is already provisioned: record the printed key, certificate and code hash (the
+   code hash should equal the `app.sha256` from A4) and tell the team; a `9000` also arms attestation, so a
+   following `hw.py selfpay` shows "Attested". Do **not** run `ledgerblue.endorsementSetup`. If the app closes or
+   freezes on this step instead, record that: it means the endorsement calls misbehave on retail, and the payment
+   steps above are unaffected because they never make them unless this step answered `9000` first.
 
 On the first USB command after opening the app, if Windows does not find the device, unplug it and plug it back in,
 reopen the app, and run the command again.
@@ -397,7 +418,7 @@ Push-Location $HOME\lc-flex; & $py -m ledgerblue.runScript --scp --fileName app.
 gh run download -R Sahas266/ledger-op3n-n3xt-hackathon-26 -n ledger-cash-flex -D ~/lc-flex && cat ~/lc-flex/app.sha256
 (cd ~/lc-flex && $PY -m ledgerblue.runScript --scp --fileName app.apdu --elfFile app.elf)
 ```
-- The hash must be `9c8cfe79ceb043e3ef728eaa12f117e8a17d92e35cb639be3fb0a0887bfbcd57`.
+- The hash must be `69873224e9a205cbff4b5a40ec22846dba9f2a7caded36738c3d781be2a2acdb`.
 - If the download finds no artifact, CI has not run yet: ask Sahas to zip `mvp/ledger-cash/app/build/flex/bin/`
   (`app.apdu`, `app.elf`, `app.sha256`) and send it.
 - During the sideload, the Flex asks to allow an unsafe manager ("Allow unsafe manager"). Approve it on the
@@ -407,7 +428,8 @@ gh run download -R Sahas266/ledger-op3n-n3xt-hackathon-26 -n ledger-cash-flex -D
 
 ### B5. Open the app and configure it (anvil)
 1. Open **Ledger Cash** on the Flex and acknowledge the not-genuine warning.
-2. Expected home screen: "Ledger Cash", "Cash: 0 USDC" and a **Pay by tap** button.
+2. Expected home screen: "Ledger Cash", "Cash: 0 USDC", a **Pay by tap** button and a settings wheel (top right;
+   it holds the till, B5b).
 3. Wait about 5 s, then:
    ```powershell
    & $py hw.py balance; & $py hw.py setup anvil 10
@@ -425,6 +447,40 @@ Chain ID **84532** with token `0x036C…CF7E` (Base Sepolia). Reject anything el
 
 That address is the Flex's **cash account** (`44'/1279476051'/0'/0/0`), not one of its Ethereum app accounts. Send it
 to Sahas: it gets funded at settlement.
+
+### B5b. Try the on-device till (optional, 5 min, Flex only, no phone; skip if short on time, gates B6-B8 first)
+The Flex as a shop till: the payee types the request on its own screen. Compare with `screens/till/` (emulated run).
+1. Home: tap the **settings wheel** (top right), then **Request payment** (screenshots 07-08).
+2. Keypad "Amount in USDC": type `4`, tap the check key (bottom right). Keypad "Cents (2 digits)": type `50`, check
+   (09-10). Cents is always two digits: `50` is 0.50, `05` is 0.05.
+3. "Payment for": tap **Coffee** (Gift and Other are on page 2, arrow bottom right) (11).
+4. "Request 4.5 USDC / For: Coffee": **Approve** (12). Home now reads "Waiting for tap: / 4.5 USDC Coffee /
+   to 0x…" with a **Cancel request** button (13). Over NFC the Flex now serves this request like a USB SET_REQUEST.
+   Do not press **Cancel request** while the payer's screen shows the review: if it is pressed after `GET_REQUEST` is
+   served and before `PUT_AUTH`, `PUT_AUTH` gets `B006` after the payer has already debited, and that auth survives
+   only in the payer's RAM. If it happens, read the auth with `hw.py status` on the payer and settle it.
+5. Pay it from the same Flex over USB (the Flex is payer and payee, as `selfpay` on the Nano):
+   ```powershell
+   & $py hw.py selfpay till
+   ```
+   ```bash
+   $PY hw.py selfpay till
+   ```
+   Review "Pay 4.5 USDC?" (To = the Flex's own cash account, For Coffee), hold to sign. Expected: `receipt ok`, then
+   the status "Signed IOU for 4.5 USDC from 0x… Not attested / Not settled yet" (25). "Not attested" is expected: no
+   endorsement slot is provisioned, so the Flex sends no attestation. With sound on in the Flex settings, it plays
+   the SDK's success tune (`nbgl_useCaseStatus` success; not checkable in the emulator). The second PAY gives `B004`.
+6. Settings wheel → **Show settlement QR** (27): a QR of the latest signed IOU, "IOU 4.5 USDC from 0x… Not settled
+   yet", **Close**. It is display-only: scan it with the phone camera, copy the text (`lcash:…`, 200 characters), and
+   `hw.py qr "<text>" flex-qr.json` turns it into the same JSON as `hw.py auths` for `settle.mjs` (B8). Close it
+   before any tap: while the QR is up the Flex answers `B007` (busy) over NFC and USB.
+7. Till again with any amount, then **Cancel request** on the home: "Request cancelled", and
+   `hw.py raw E011000000` gives `SW B006 no request`.
+8. Put the cash back for B7 (it expects 10): `hw.py setup anvil 4.5`, approve both screens. Expected
+   `cash 10 USDC, pay counter 1`.
+
+All of this is a **signed IOU** from a device-capped cash account (a spending cap, not escrow): nothing is settled
+until someone submits the auth on-chain.
 
 ### B6. GATE 1: does the reader power on, and does CARD_DETECTED fire?
 You need a **contactless bank card**. It answers ISO-DEP. A transit or hotel card may not.
@@ -615,7 +671,7 @@ Follow `mvp/android/README.md` section **B** ("Nano bridge") steps 1-6, with the
    (approve twice on the Nano)**. On the Nano, approve "Set USDC network" and then "Request 1 USDC | For: coffee".
 3. On the Flex, start a tap (`hw.py tap` or **Pay by tap**) and tap the phone.
    - Expected on the Flex: the same review as B7, with **To = the Nano's address**, then "Paid 1 USDC to 0x…".
-   - Expected on the Nano: **"IOU 1 USDC from | 0x…… | Not settled yet"**.
+   - Expected on the Nano: **"IOU 1 USDC from | 0x…… | Not attested | Not settled yet"**.
    - Expected on the phone: "Nano got authorization (unsettled IOU) for 1 USDC from 0x…".
 4. Settle: share from the phone (save as `mvp/ledger-cash/settle/phone-auths.json`), or plug the Nano into a laptop
    and run `hw.py auths settle/nano-auths.json` from `mvp/ledger-cash`. Then use B8 Option A with that file.

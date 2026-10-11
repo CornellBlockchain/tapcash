@@ -4,15 +4,18 @@ python hw.py version                 dashboard only: target id + OS version (0x3
 python hw.py setup anvil|base [usdc]  SET_CONFIG (approve on device), LOAD_CASH usdc (default 10; 0 = skip), balance
 python hw.py balance                 GET_BALANCE: cash, pay counter, cash-account address (44'/1279476051'/0'/0/0)
 python hw.py selfpay [usdc] [label]  one device pays itself: SET_REQUEST, GET_REQUEST, PAY, PUT_AUTH, PAY again (B004)
+python hw.py selfpay till            the same, paying the request typed on the device's own till (no SET_REQUEST)
+python hw.py qr <lcash:...> [file]   payee's "Show settlement QR" text -> JSON for settle/settle.mjs (default qr-auth.json)
 python hw.py auths [file]            GET_AUTHS slots 0..7 -> JSON for settle/settle.mjs (default device-auths.json)
 python hw.py tap                     Flex: TAP_TO_PAY, then poll TAP_STATUS until the tap ends (Ctrl-C stops)
 python hw.py status                  Flex: one TAP_STATUS (a signed auth is also written to tap-auth.json)
+python hw.py attest                  read-only: GET_ATTESTATION (endorsement slot 1 + code hash) and GET_LAST_ATTEST.
+                                     A retail device answers B00A until slot 1 is provisioned (README "Attested IOUs");
+                                     a 9000 also arms attestation of payments until the app closes
 python hw.py raw <hex>               any APDU
 Every APDU and its status word is printed. Speculos: set LEDGER_PROXY_ADDRESS=127.0.0.1 LEDGER_PROXY_PORT=<apdu port>.
 """
-import json, sys, time
-from ledgerblue.comm import getDongle
-from ledgerblue.commException import CommException
+import base64, json, sys, time
 
 NETS = {"anvil": (31337, "5FbDB2315678afecb367f032d93F642f64180aa3"),  # first deploy on a fresh anvil
         "base": (84532, "036CbD53842c5426634e7929541eC2318f3dCF7e")}   # Base Sepolia USDC (name USDC, version 2)
@@ -21,13 +24,15 @@ SW = {0x9000: "ok", 0x6985: "rejected on device", 0x6D00: "unknown INS", 0x6A82:
       0x6700: "wrong length", 0x6A80: "bad data", 0x6E00: "wrong CLA", 0xB0FF: "crypto failure",
       0x511F: "OS too old for this app", 0xB001: "bad payee signature", 0xB002: "not configured / wrong network",
       0xB003: "not enough cash", 0xB004: "already paid", 0xB005: "bad auth", 0xB006: "no request", 0xB007: "busy",
-      0xB008: "card removed", 0xB009: "payee did not answer"}
+      0xB008: "card removed", 0xB009: "payee did not answer", 0xB00A: "not attested / endorsement slot not provisioned"}
 dongle = None
 
 
 def x(apdu, quiet=False, timeout=600):
     """Send hex APDU, return (data, sw). Raises only on transport errors (no device, timeout), not on a status word."""
     global dongle
+    from ledgerblue.comm import getDongle  # here, so `qr` (and till_demo.py) run without ledgerblue
+    from ledgerblue.commException import CommException
     dongle = dongle or getDongle(False)
     try:
         data, sw = bytes(dongle.exchange(bytes.fromhex(apdu), timeout=timeout)), 0x9000  # HID: seconds (long: waits for on-device approval)
@@ -58,6 +63,15 @@ def auth_json(a):
             "validBefore": h(a[56:64]), "nonce": h(a[64:96]), "v": hex(a[96]), "r": h(a[97:129]), "s": h(a[129:161])}
 
 
+def qr_auth(text):
+    """Settlement QR "lcash:" + base64url(from|to|value|nonce|v|r|s) -> the 161-byte auth. The device stores only auths
+    with validAfter 0 and validBefore 2^64-1, so the QR leaves those 16 bytes out."""
+    assert text.startswith("lcash:"), "not a Ledger Cash settlement QR"
+    b = base64.urlsafe_b64decode(text[6:] + "=" * (-len(text[6:]) % 4))
+    assert len(b) == 145, len(b)
+    return b[:48] + bytes(8) + b"\xff" * 8 + b[48:]
+
+
 def tap_status(d=None):
     d, sw = (d, 0x9000) if d else cmd(0x31)
     if sw == 0x9000:
@@ -83,16 +97,19 @@ def main(a):
     elif c == "balance":
         balance()
     elif c == "selfpay":
-        value = round(float(a[1] if len(a) > 1 else 5) * 1e6)
-        label = (a[2] if len(a) > 2 else "coffee").encode()
-        if cmd(0x10, value.to_bytes(8, "big") + label)[1] != 0x9000: return 1
+        if a[1:2] != ["till"]:
+            value = round(float(a[1] if len(a) > 1 else 5) * 1e6)
+            label = (a[2] if len(a) > 2 else "coffee").encode()
+            if cmd(0x10, value.to_bytes(8, "big") + label)[1] != 0x9000: return 1
         req, sw = cmd(0x11)
         if sw != 0x9000: return 1
         auth, sw = cmd(0x22, req)
         if sw != 0x9000: return 1
         print("auth", json.dumps(auth_json(auth)))
-        r, sw = cmd(0x23, auth)
+        att, sw = cmd(0x33)  # state 1 only if `hw.py attest` armed it this app session (provisioned slot)
+        r, sw = cmd(0x23, auth)  # (PUT_AUTH clears this device's attestation record, hence read before)
         print("receipt", "ok" if sw == 0x9000 and r[:1] == b"\x01" else "MISSING")
+        if att[:1] == b"\x01": cmd(0x25, att[1:])  # noqa: E701  payee side verifies it: 9000 / B00A
         cmd(0x22, req)  # same request again: expect B004
         balance()
     elif c == "auths":
@@ -118,6 +135,17 @@ def main(a):
             tap_status()
     elif c == "status":
         tap_status()
+    elif c == "attest":
+        d, sw = cmd(0x32)
+        if sw == 0x9000:
+            print(f"endorsement key {d[:65].hex()}\ncertificate {d[66:66 + d[65]].hex()}\ncode hash {d[-32:].hex()}")
+        d, sw = cmd(0x33)
+        if sw == 0x9000:
+            print(f"last IOU attestation state {d[0]} (0 none, 1 signed here, 2 received + verified, 3 not verified)")
+    elif c == "qr":
+        f = a[2] if len(a) > 2 else "qr-auth.json"
+        open(f, "w").write(json.dumps([auth_json(qr_auth(a[1]))], indent=1) + "\n")
+        print(f"1 auth -> {f}")
     elif c == "raw":
         x(a[1])
     else:

@@ -1,0 +1,100 @@
+  genuine build app.sha256 69873224e9a205cbff4b5a40ec22846dba9f2a7caded36738c3d781be2a2acdb
+  cheating build app.sha256 1cbdb79bcc68444e27ecab7d020ec6b55d37a67cc39bac8a369ccaa3aff4bdf0
+== 1. genuine payer -> genuine payee (both Speculos instances report their own code hash)
+  [payer] Set USDC network | Chain ID 31337 | USDC  | 0x5FBDB2315678AFECB367F0 | 32D93F642F64180AA3 | Reject | Approve
+  [payee] Set USDC network | Chain ID 31337 | USDC  | 0x5FBDB2315678AFECB367F0 | 32D93F642F64180AA3 | Reject | Approve
+  [payer] Load 20 USDC as cash | Cash after: 20 USDC | Reject | Approve
+  GET_ATTESTATION on both: endorsement key 04b7962a8e0e4b9ca0..., cert valid, code hash = app.sha256
+  [payee] Request 25 USDC | For: over the cap | Reject | Approve
+  genuine payer, 20 USDC loaded, asked for 25 USDC: PAY -> B003 (device cap holds, nothing signed)
+  [payee] Request 5 USDC | For: coffee | Reject | Approve
+  tap: card 04a1b2c3 in field
+    reader > card 00a404000cf04c45444745524341534801
+    reader < card 9000
+    reader > card e011000000
+    reader < card 0000000000007a695fbdb2315678afecb367f032d93f642f64180aa3b1124942ba3ceb48d87dac9babc50ca3b50a72db00000000004c4b40ffffffffffffffff44337d54636f66666565000000000000000000000000000000000000f7a9c64c67d3581d516e9d865372179dce20f57fd3888cf2c16ca2b54dcfb5204b8fa1df9ad54518e4538af04107f83a6729759c0dee1bb19a78e63d09fac7541c9000
+  [payer screen] Reading request | Pay with | USDC cash | Swipe to review | Reject | 1 of 4
+  [payer screen] Pay | 5 USDC | To | 0xB1124942BA3CEB48 | D87DAC9BABC50CA3B | 50A72DB | For | coffee | Reject | 2 of 4
+  [payer screen] Cash left after | 15 USDC | Reject | 3 of 4
+  [payer screen] Pay 5 USDC? | Reject | 4 of 4 | Hold to sign
+    reader > card e0230000a146ce8565dd320e3764aa33cbda7024f469132354b1124942ba3ceb48d87dac9babc50ca3b50a72db00000000004c4b400000000000000000ffffffffffffffff913fa8c78e6a57b3b517b227bedc7b4918470ef260f318fc65abd5d7c2037e221b91635d62086f7538d9daf0cb2fd26db7342dc99698a3d8626c14edc36e41183540d8e608d14f1128458dc65cd67c24531e3d5784a29f199faf848912de7f7e3a
+    reader < card 01c25365b1f589761f8581d6b23c062398dc8ad54002cf59a4eadb40dabab58d072520f6a93c6dc16ffad45759ab7529d17f06a47f9ba86bc62b1873fab8830eb91b9000
+    reader > card e0250000f004b7962a8e0e4b9ca020ec74875ae0ebb2dd938062fe6e00bb1f9b060dd859755a263e43d99d9edfee42f2d3a8ae7fc254a7c5ca4bcb787712618300a63b61949c473045022100bf237e5b40061417f662a6d08a4bde1fe3343bd8708ced046c8417495ad36ccf02203d39a532eecadff6df2053e4ab9896aa00f3bef15c4bd11c53661e54fe5e2ff469873224e9a205cbff4b5a40ec22846dba9f2a7caded36738c3d781be2a2acdb46304402207d3429c8a0c923c3424726642d6ad00b74a95d2719ca40bcaeda2c038d72b9de022033cb7c84c234f1718f377545349959fc39b955685b980f6d513450af6da7bb44
+    reader < card 9000
+  tap: card removed after 4 APDU(s)
+  TAP_STATUS PAID sw 9000   payer screen: Sending payment | Paid 5 USDC | to  | 0xB1124942BA3CEB48 | D87DAC9BABC50CA3B | 50A72DB
+  [payee screen] Signed IOU for 5 USDC | from  | 0x46CE8565DD320E37 | 64AA33CBDA7024F46 | 9132354 | Not attested | Not settled yet | Signed IOU for 5 USDC | from  | 0x46CE8565DD320E37 | 64AA33CBDA7024F46 | 9132354 | Certified device key | Not settled yet
+  $ python attest/verify_attestation.py attest/iou-genuine.json --codehash app/build/flex/bin/app.sha256  -> exit 0
+    endorsement key   04b7962a8e0e4b9ca0...
+    certificate       valid under certifier 044114d16aeceda8d7...
+    pinned code hash  69873224e9a205cbff4b5a40ec22846dba9f2a7caded36738c3d781be2a2acdb
+    claimed code hash 69873224e9a205cbff4b5a40ec22846dba9f2a7caded36738c3d781be2a2acdb
+    sig over keccak(auth) || pinned hash: valid
+    ATTESTED
+  PAID 5 USDC; payee verified the attestation on the device (state 2) and shows 'Certified device key'
+  over NFC: a broken PUT_ATTEST -> B00A and the verified record stays; GET_ATTESTATION / GET_LAST_ATTEST -> 6D00
+== 2. cheating payer (cap check deleted) -> genuine payee
+  [payer] Set USDC network | Chain ID 31337 | USDC  | 0x5FBDB2315678AFECB367F0 | 32D93F642F64180AA3 | Reject | Approve
+  [payee] Set USDC network | Chain ID 31337 | USDC  | 0x5FBDB2315678AFECB367F0 | 32D93F642F64180AA3 | Reject | Approve
+  [payer] Load 20 USDC as cash | Cash after: 20 USDC | Reject | Approve
+  [payee] Request 25 USDC | For: over the cap | Reject | Approve
+  tap: card 04a1b2c3 in field
+    reader > card 00a404000cf04c45444745524341534801
+    reader < card 9000
+    reader > card e011000000
+    reader < card 0000000000007a695fbdb2315678afecb367f032d93f642f64180aa3b1124942ba3ceb48d87dac9babc50ca3b50a72db00000000017d7840ffffffffffffffff4b724cd46f7665722074686520636170000000000000000000000000ea17680dcf46ece36df170c7fef320e6890ee746ce68389b0480a85f04abaf867dc034a7fbf78223f2961aa12bebdfc57e56c8ed6a3a6e2e257e75533f7736881b9000
+  [payer screen] Reading request | Pay with | USDC cash | Swipe to review | Reject | 1 of 4
+  [payer screen] Pay | 25 USDC | To | 0xB1124942BA3CEB48 | D87DAC9BABC50CA3B | 50A72DB | For | over the cap | Reject | 2 of 4
+  [payer screen] Cash left after |  USDC | Reject | 3 of 4
+  [payer screen] Pay 25 USDC? | Reject | 4 of 4 | Hold to sign
+    reader > card e0230000a146ce8565dd320e3764aa33cbda7024f469132354b1124942ba3ceb48d87dac9babc50ca3b50a72db00000000017d78400000000000000000ffffffffffffffffe0f0bf1ee4e07da718a72db9a95a335a7212e22551d0399bda7e8654b3e6e5fa1cbbf0ec81126e04ddaa5d8795f1e6f0d14ff4ee6f58ee69f176f0fd798d0e202c2db66d02f7eac139345b2f010a1d3ac0a2e8a15c786294f039e1714fdc638329
+    reader < card 01463448a42cd6515c25b3cce71f564638ff62b7581c6e2428abd55643b252a9716514ca863c84000a9fb4fd8005c9bf6d954e34416dcda068c04369a8143d773e1b9000
+    reader > card e0250000f004b7962a8e0e4b9ca020ec74875ae0ebb2dd938062fe6e00bb1f9b060dd859755a263e43d99d9edfee42f2d3a8ae7fc254a7c5ca4bcb787712618300a63b61949c473045022100bf237e5b40061417f662a6d08a4bde1fe3343bd8708ced046c8417495ad36ccf02203d39a532eecadff6df2053e4ab9896aa00f3bef15c4bd11c53661e54fe5e2ff41cbdb79bcc68444e27ecab7d020ec6b55d37a67cc39bac8a369ccaa3aff4bdf046304402204cff3b859dc1c2a460a095f58dc678696d3398c47a8d9000e3ed7d272554b67102207ee3dadc8eecd4e3fda9af277303a7acdf8b9f9be626efdb24a58af5949f8f86
+    reader < card b00a
+  tap: card removed after 4 APDU(s)
+  TAP_STATUS PAID sw 9000   payer screen: Sending payment | Paid 25 USDC | to  | 0xB1124942BA3CEB48 | D87DAC9BABC50CA3B | 50A72DB
+  [payee screen] Signed IOU for 25  | USDC | from  | 0x46CE8565DD320E37 | 64AA33CBDA7024F46 | 9132354 | Not attested | Not settled yet | Signed IOU for 25  | USDC | from  | 0x46CE8565DD320E37 | 64AA33CBDA7024F46 | 9132354 | Not attested | Not settled yet
+  the cheat signed 25 USDC over a 20 USDC load (its cash counter wrapped to 18446744073704551616); the payee stored the IOU, verdict state 3 = NOT attested
+  $ python attest/verify_attestation.py attest/iou-cheat.json --codehash app/build/flex/bin/app.sha256  -> exit 1
+    endorsement key   04b7962a8e0e4b9ca0...
+    certificate       valid under certifier 044114d16aeceda8d7...
+    pinned code hash  69873224e9a205cbff4b5a40ec22846dba9f2a7caded36738c3d781be2a2acdb
+    claimed code hash 1cbdb79bcc68444e27ecab7d020ec6b55d37a67cc39bac8a369ccaa3aff4bdf0   (differs from pinned)
+    sig over keccak(auth) || pinned hash: INVALID
+    sig verifies with the CLAIMED hash: the IOU was signed inside a different build
+    NOT ATTESTED
+  replaying round 1's genuine attestation for this IOU: PUT_ATTEST -> B00A (it covers another auth)
+== 3. forging payer (cap deleted, key1_sign_without_code_hash over keccak(auth)||genuine hash) -> genuine payee
+  forging build app.sha256 73d950658c5447b5bf4ca28cd93b1035ce8dafe577d3098dc4a446558f42b987
+  [payer] Set USDC network | Chain ID 31337 | USDC  | 0x5FBDB2315678AFECB367F0 | 32D93F642F64180AA3 | Reject | Approve
+  [payee] Set USDC network | Chain ID 31337 | USDC  | 0x5FBDB2315678AFECB367F0 | 32D93F642F64180AA3 | Reject | Approve
+  [payer] Load 20 USDC as cash | Cash after: 20 USDC | Reject | Approve
+  [payee] Request 25 USDC | For: over the cap | Reject | Approve
+  tap: card 04a1b2c3 in field
+    reader > card 00a404000cf04c45444745524341534801
+    reader < card 9000
+    reader > card e011000000
+    reader < card 0000000000007a695fbdb2315678afecb367f032d93f642f64180aa3b1124942ba3ceb48d87dac9babc50ca3b50a72db00000000017d7840ffffffffffffffffffe6229e6f766572207468652063617000000000000000000000000033ad1fc8d3ddb96bd6dd17a9925c93d90dd4ec40a041547616be3f10f75c021801648d06a37f0c1e6a7aea4d11fe696a663479b081aef180b443dbf87817be781b9000
+  [payer screen] Reading request | Pay with | USDC cash | Swipe to review | Reject | 1 of 4
+  [payer screen] Pay | 25 USDC | To | 0xB1124942BA3CEB48 | D87DAC9BABC50CA3B | 50A72DB | For | over the cap | Reject | 2 of 4
+  [payer screen] Cash left after |  USDC | Reject | 3 of 4
+  [payer screen] Pay 25 USDC? | Reject | 4 of 4 | Hold to sign
+    reader > card e0230000a146ce8565dd320e3764aa33cbda7024f469132354b1124942ba3ceb48d87dac9babc50ca3b50a72db00000000017d78400000000000000000ffffffffffffffff28a2fcc6d4b945b30b64817081f605077a65f9598c57f43135cf67c1f92e68071c6fdeb75088397c665ffffeabf6fe3316e52b3e14f687d4ee2f918b9d01912798677cbb848a82be23fd960e59cdcf4685d336a575bcbbb7f8cdf6d048e90b9063
+    reader < card 01bafc3e9a86e8a0af04c1c71b92434e1e97de745fb221d1b9ed3ce2b218283b9f5e9be0eda6cf027dc95b3ef52ee24f40dd1b7e2ab0e0da9aba6d21c984f95ba41b9000
+    reader > card e0250000f004b7962a8e0e4b9ca020ec74875ae0ebb2dd938062fe6e00bb1f9b060dd859755a263e43d99d9edfee42f2d3a8ae7fc254a7c5ca4bcb787712618300a63b61949c473045022100bf237e5b40061417f662a6d08a4bde1fe3343bd8708ced046c8417495ad36ccf02203d39a532eecadff6df2053e4ab9896aa00f3bef15c4bd11c53661e54fe5e2ff469873224e9a205cbff4b5a40ec22846dba9f2a7caded36738c3d781be2a2acdb46304402205a949af7a6b7ac0ab83e32e2c1a80f8c1b1fcdac0d96d696693605888853e8fa02203676c172776f8a78854b69dfa06c6430fce12a5907a395c9140eb1dad8820dc4
+    reader < card 9000
+  tap: card removed after 4 APDU(s)
+  TAP_STATUS PAID sw 9000   payer screen: Sending payment | Paid 25 USDC | to  | 0xB1124942BA3CEB48 | D87DAC9BABC50CA3B | 50A72DB
+  [payee screen] Signed IOU for 25  | USDC | from  | 0x46CE8565DD320E37 | 64AA33CBDA7024F46 | 9132354 | Not attested | Not settled yet | Signed IOU for 25  | USDC | from  | 0x46CE8565DD320E37 | 64AA33CBDA7024F46 | 9132354 | Certified device key | Not settled yet
+  $ python attest/verify_attestation.py attest/iou-forge.json --codehash app/build/flex/bin/app.sha256  -> exit 0
+    endorsement key   04b7962a8e0e4b9ca0...
+    certificate       valid under certifier 044114d16aeceda8d7...
+    pinned code hash  69873224e9a205cbff4b5a40ec22846dba9f2a7caded36738c3d781be2a2acdb
+    claimed code hash 69873224e9a205cbff4b5a40ec22846dba9f2a7caded36738c3d781be2a2acdb
+    sig over keccak(auth) || pinned hash: valid
+    ATTESTED
+  the forge signed 25 USDC over a 20 USDC load; the payee shows 'Certified device key' (state 2) and the
+  offline verifier says ATTESTED. v1's code-hash binding is forgeable by any app via the real BOLOS
+  syscall sys_endorsement_key1_sign_without_code_hash: a negative result, not a guarantee to a shop.
+ALL PASS
+PYEXIT=0

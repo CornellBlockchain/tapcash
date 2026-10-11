@@ -12,6 +12,10 @@ Both tap orders pass (reader on then card arrives; card already in the field whe
 > refuses host commands over NFC. Verified by `../demo.py` (ALL PASS). `check_tap.py` was **not** re-run after this
 > change (reader instance unchanged; the card path is covered by demo.py).
 
+> Update (attested IOUs, 2026-10-10): a second, independent Speculos patch lives in `../attest/speculos_codehash.py`:
+> it gives each instance its ELF's real code hash for the endorsement syscalls. It does not touch `seproxyhal.py`;
+> `../attest_demo.py` and `../app/test_nano.py` use both. See ../README.md "Attested IOUs".
+
 ## Files
 
 | File | What |
