@@ -37,6 +37,8 @@ static const uint8_t FIDO_AID[] = {0xA0, 0x00, 0x00, 0x06, 0x47, 0x2F, 0x00, 0x0
 
 // Payment request (key handle): to(20) | value(8, micro-USDC) | validBefore(4) | nonce(32)
 #define REQ_LEN 64
+// Address request (key handle): "ADDR". Lets the page fill in where to move funds to.
+static const uint8_t ADDR_REQ[] = {'A', 'D', 'D', 'R'};
 
 // USDC on Base Sepolia (0x036CbD53842c5426634e7929541eC2318f3dCF7e, chainId 84532).
 // Both values checked against the contract's DOMAIN_SEPARATOR() and
@@ -163,6 +165,23 @@ static void start_review(const uint8_t *kh) {
                        review_choice);
 }
 
+// One tap, no approval: an address is public. Shown on screen so the user can compare it with
+// the page. Same layout as a payment response (minimal DER(1, 1) as the signature) so the page
+// reuses its parser.
+static void send_address(void) {
+    static char text[64];
+    uint8_t resp[13 + 20] = {0x01, 0, 0, 0, 0, 0x30, 0x06, 0x02, 0x01, 0x01, 0x02, 0x01, 0x01};
+    if (!get_address(resp + 13)) {
+        io_send_sw(SW_CRYPTO);
+        return;
+    }
+    state = IDLE;  // replaces any pending review screen
+    io_send_response_pointer(resp, sizeof(resp), SW_OK);
+    size_t n = snprintf(text, sizeof(text), "Address sent\n0x");
+    format_hex(resp + 13, 20, text + n, sizeof(text) - n);
+    nbgl_useCaseStatus(text, true, ui_home);
+}
+
 // ISO 7816-4 command with data, short or extended Lc, optional Le.
 // Returns the data length, or -1 if malformed. The SDK's apdu_parser rejects a trailing Le,
 // which iOS sends.
@@ -197,7 +216,9 @@ static void handle_u2f_sign(uint8_t p1, const uint8_t *data, int lc) {
         return;
     }
     const uint8_t *kh = data + U2F_KH_LEN_OFFSET + 1;
-    if (data[U2F_KH_LEN_OFFSET] != REQ_LEN) {
+    uint8_t kh_len = data[U2F_KH_LEN_OFFSET];
+    bool is_addr = kh_len == sizeof(ADDR_REQ) && memcmp(kh, ADDR_REQ, sizeof(ADDR_REQ)) == 0;
+    if (kh_len != REQ_LEN && !is_addr) {
         io_send_sw(SW_WRONG_DATA);  // "not our key handle"
         return;
     }
@@ -205,6 +226,11 @@ static void handle_u2f_sign(uint8_t p1, const uint8_t *data, int lc) {
     // Check-only probe: "yes, this key handle is ours"
     if (p1 == P1_CHECK_ONLY) {
         io_send_sw(SW_NOT_SATISFIED);
+        return;
+    }
+
+    if (is_addr) {
+        send_address();
         return;
     }
 

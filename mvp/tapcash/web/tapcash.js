@@ -17,7 +17,10 @@ const N = 0xfffffffffffffffffffffffffffffffebaaedce6af48a03bbfd25e8cd0364141n;
 const hex = b => '0x' + [...b].map(x => x.toString(16).padStart(2, '0')).join('');
 const bytes = h => Uint8Array.from(h.slice(2).match(/../g), x => parseInt(x, 16));
 
-// Key handle: to(20) | value(8, micro-USDC) | validBefore(4) | nonce(32)
+// Address request key handle: the Flex answers with its address (as `from`) in one tap.
+export const ADDR_REQUEST = new TextEncoder().encode('ADDR');
+
+// Payment request key handle: to(20) | value(8, micro-USDC) | validBefore(4) | nonce(32)
 export function buildRequest(to, value, validBefore, nonce) {
   const kh = new Uint8Array(64);
   const dv = new DataView(kh.buffer);

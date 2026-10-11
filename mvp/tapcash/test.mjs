@@ -8,7 +8,7 @@
 import assert from 'node:assert/strict';
 import { createPublicClient, http, recoverTypedDataAddress, serializeSignature, toHex } from 'viem';
 import { baseSepolia } from 'viem/chains';
-import { USDC, DOMAIN, TYPES, buildRequest, parseRequest, parseResponse } from './web/tapcash.js';
+import { USDC, DOMAIN, TYPES, ADDR_REQUEST, buildRequest, parseRequest, parseResponse } from './web/tapcash.js';
 
 const API = "http://localhost:5001";  // macOS AirPlay owns 5000
 const post = (path, body) => fetch(API + path, { method: 'POST', body: JSON.stringify(body) }).then(r => r.json());
@@ -27,6 +27,11 @@ assert.equal(await apdu('00a4040008a0000006472f000100'), Buffer.from('U2F_V2').t
 assert.equal(await apdu('00a4040007d276000085010100'), '6a82');   // NDEF probe ignored
 assert.equal(await apdu('80100000010400'), '6d00');               // CTAP2 refused -> U2F fallback
 assert.equal(await sign(Buffer.from('other site')), '6a80');      // not our key handle
+assert.equal(await sign(ADDR_REQUEST, 7), '6985');                // address request: ours
+const addrRaw = Buffer.from((await sign(ADDR_REQUEST)).slice(0, -4), 'hex');  // one tap, no approval
+assert.equal(parseResponse(Buffer.concat([Buffer.alloc(32), addrRaw.subarray(0, 5)]), addrRaw.subarray(5)).from, flex.toLowerCase());
+await sleep(1000);
+assert.match((await (await fetch(API + '/events')).json()).events.map(e => e.text).join(''), new RegExp(flex.slice(2), 'i'));  // shown on the Flex
 assert.equal(await sign(kh, 7), '6985');                          // check-only: ours
 assert.equal(await sign(kh), '6985');                             // tap 1: review shown
 await sleep(1000);

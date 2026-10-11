@@ -46,6 +46,8 @@
   .flex .reject { font-size: 11px; font-weight: 600; }
   .addr { align-self: stretch; display: flex; align-items: center; gap: 12px; background: var(--soft); border-radius: 16px; padding: 16px; text-align: left; font-size: 14px; font-weight: 500; word-break: break-all; }
   .addr button { background: none; border: 0; color: var(--lime-dark); font-size: 15px; font-weight: 600; }
+  .chip .link { margin-left: auto; background: none; border: 0; color: var(--lime-dark); font-size: 15px; font-weight: 600; }
+  .addr input { flex: 1; min-width: 0; border: 0; background: none; font: inherit; color: var(--ink); outline: none; }
   .big { margin: 0; font-size: 44px; font-weight: 700; color: var(--ink); }
   a { color: var(--ink); font-size: 15px; font-weight: 600; }
 </style>
@@ -68,7 +70,7 @@
 </section>
 
 <section id="receive" class="screen" hidden>
-  <div class="chip"><div><small id="walletLine">iPhone wallet</small><strong class="usdc">… USDC</strong></div></div>
+  <div class="chip"><div><small id="walletLine">iPhone wallet</small><strong class="usdc">… USDC</strong></div><button class="link" id="toMove">Move</button></div>
   <div class="grow"></div>
   <p>Request</p>
   <div class="amount"><output id="amount">0</output><span>USDC</span></div>
@@ -111,23 +113,38 @@
   <a id="basescan" target="_blank" rel="noopener">View on Basescan ↗</a>
   <div class="grow"></div>
   <div class="chip"><div><small>iPhone wallet balance</small><strong class="usdc"></strong></div></div>
+  <button class="btn secondary" id="doneMove">Move to my Ledger</button>
   <button class="btn" id="newRequest">New request</button>
+</section>
+
+<section id="move" class="screen" hidden>
+  <div class="chip"><div><small>iPhone wallet balance</small><strong class="usdc"></strong></div></div>
+  <div class="grow"></div>
+  <div class="halo" id="moveArt"></div>
+  <h2>Move to your Ledger</h2>
+  <p id="moveHint">Tap your Ledger to fill in its address, or paste one.</p>
+  <div class="addr"><input id="dest" placeholder="0x…" autocomplete="off" autocapitalize="off" spellcheck="false"><button id="tapAddress">Tap</button></div>
+  <p class="err" id="moveErr"></p>
+  <div class="grow"></div>
+  <button class="btn" id="moveBtn" disabled>Move USDC</button>
+  <button class="btn secondary" id="moveBack">Back</button>
 </section>
 
 <script type="module">
 // The iPhone is the receiver's wallet: a burner key in localStorage that also pays gas.
 // WebAuthn is the NFC transport: tap (request), approve on the Flex, tap again (signature).
 import { createPublicClient, createWalletClient, http, parseUnits, formatUnits,
-         recoverTypedDataAddress, serializeSignature, toHex } from 'https://esm.sh/viem@2.57.4';
+         recoverTypedDataAddress, serializeSignature, toHex, getAddress, isAddress } from 'https://esm.sh/viem@2.57.4';
 import { privateKeyToAccount, generatePrivateKey } from 'https://esm.sh/viem@2.57.4/accounts';
 import { baseSepolia } from 'https://esm.sh/viem@2.57.4/chains';
-import { USDC, DOMAIN, TYPES, buildRequest, parseRequest, parseResponse } from './tapcash.js';
+import { USDC, DOMAIN, TYPES, ADDR_REQUEST, buildRequest, parseRequest, parseResponse } from './tapcash.js';
 
 const $ = id => document.getElementById(id);
 const show = id => document.querySelectorAll('.screen').forEach(s => (s.hidden = s.id !== id));
 const short = a => a.slice(0, 6) + '…' + a.slice(-4);
 const ABI = [
   { name: 'balanceOf', type: 'function', stateMutability: 'view', inputs: [{ type: 'address' }], outputs: [{ type: 'uint256' }] },
+  { name: 'transfer', type: 'function', stateMutability: 'nonpayable', inputs: [{ type: 'address' }, { type: 'uint256' }], outputs: [{ type: 'bool' }] },
   { name: 'transferWithAuthorization', type: 'function', stateMutability: 'nonpayable', outputs: [], inputs: [
     { name: 'from', type: 'address' }, { name: 'to', type: 'address' }, { name: 'value', type: 'uint256' },
     { name: 'validAfter', type: 'uint256' }, { name: 'validBefore', type: 'uint256' }, { name: 'nonce', type: 'bytes32' },
@@ -147,6 +164,7 @@ const art = (size, fg, ac, bg) => `<svg width="${size}" height="${size}" viewBox
     .map(([cx, cy, a0, a1]) => arc(cx, cy, 58, a0, a1) + arc(cx, cy, 88, a0 + 8, a1 - 8)).join('') + `"/></g></svg>`;
 $('holdArt').innerHTML = art(200, '#0E0E10', '#7FB800');
 $('setupArt').innerHTML = art(120, '#fff', '#C6FF3D', '#0E0E10');
+$('moveArt').innerHTML = art(140, '#0E0E10', '#7FB800');
 
 localStorage.tcKey ??= generatePrivateKey();
 const account = privateKeyToAccount(localStorage.tcKey);
@@ -155,12 +173,15 @@ const wallet = createWalletClient({ account, chain: baseSepolia, transport: http
 $('address').textContent = account.address;
 $('walletLine').textContent = 'iPhone wallet  ' + short(account.address);
 
+let balance = 0n;
 async function refresh() {
   const [eth, usdc] = await Promise.all([
     pub.getBalance({ address: account.address }),
     pub.readContract({ address: USDC, abi: ABI, functionName: 'balanceOf', args: [account.address] }),
   ]);
   document.querySelectorAll('.usdc').forEach(e => (e.textContent = formatUnits(usdc, 6) + ' USDC'));
+  balance = usdc;
+  $('toMove').hidden = $('doneMove').hidden = usdc === 0n;
   return eth;
 }
 refresh().then(eth => show(eth === 0n ? 'setup' : 'receive'));
@@ -234,6 +255,52 @@ async function tap(step) {
     show('approve');
   }
 }
+// Off-ramp: move the iPhone wallet's whole USDC balance to the user's Ledger address.
+const destination = () => { const a = $('dest').value.trim(); return isAddress(a) ? getAddress(a) : null; };  // isAddress checks mixed-case checksums
+const moveReady = () => {
+  $('moveBtn').disabled = !destination() || balance === 0n;
+  $('moveBtn').textContent = `Move ${formatUnits(balance, 6)} USDC`;
+};
+$('dest').oninput = () => {
+  $('moveErr').textContent = $('dest').value.trim() && !destination() ? "That's not a valid address." : '';
+  moveReady();
+};
+$('toMove').onclick = $('doneMove').onclick = () => { moveReady(); show('move'); };
+$('moveBack').onclick = () => show('receive');
+$('tapAddress').onclick = async () => {
+  $('moveErr').textContent = '';
+  try {
+    const cred = await navigator.credentials.get({ publicKey: {
+      challenge: crypto.getRandomValues(new Uint8Array(32)),
+      allowCredentials: [{ type: 'public-key', id: ADDR_REQUEST, transports: ['nfc'] }],
+      userVerification: 'discouraged',
+      timeout: 60000,
+    }});
+    $('dest').value = getAddress(parseResponse(cred.response.authenticatorData, cred.response.signature).from);
+    $('moveHint').textContent = 'Filled in from your Ledger. Check it matches the address on the Flex screen.';
+  } catch {
+    $('moveErr').textContent = 'No address received. Open TapCash on the Flex and tap again.';
+  }
+  moveReady();
+};
+$('moveBtn').onclick = async () => {
+  const to = destination(), value = balance;
+  $('moveBtn').disabled = true;
+  $('moveBtn').textContent = 'Moving…';
+  try {
+    const { request } = await pub.simulateContract({ account, address: USDC, abi: ABI, functionName: 'transfer', args: [to, value] });
+    const hash = await wallet.writeContract(request);
+    await pub.waitForTransactionReceipt({ hash });
+    $('doneAmount').textContent = `${formatUnits(value, 6)} USDC moved`;
+    $('doneFrom').textContent = 'To your Ledger ' + short(to);
+    $('basescan').href = `https://sepolia.basescan.org/tx/${hash}`;
+    await refresh();
+    show('done');
+  } catch (e) {
+    $('moveErr').textContent = e.shortMessage || e.message;
+    moveReady();
+  }
+};
 $('tap').onclick = () => tap(1);
 $('tapAgain').onclick = () => tap(2);
 $('cancel').onclick = () => abort?.abort();
