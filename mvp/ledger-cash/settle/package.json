@@ -1,7 +1,0 @@
-{
-  "name": "ledger-cash-settle",
-  "private": true,
-  "type": "module",
-  "scripts": { "test": "node test.mjs" },
-  "dependencies": { "viem": "2.57.4" }
-}
