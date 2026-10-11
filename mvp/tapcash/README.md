@@ -45,6 +45,13 @@ Before the first payment:
 - Fund the Flex address with Base Sepolia USDC from faucet.circle.com.
 - Send about 0.001 Base Sepolia ETH to the iPhone wallet shown on the page.
 
+## Cash out to a card (sandbox)
+
+After a payment, "Cash out to card" sends the iPhone wallet's USDC to a cash-out address. `web/api/cashout.mjs` then reads the amount from the on-chain receipt and issues a [Lithic](https://lithic.com) sandbox virtual card with that spend limit. "Buy a $3.50 coffee" runs a simulated card authorization against it.
+- This is test money in Lithic's sandbox, not a real card. In production the same step would go to a card issuer such as Baanx (Ledger CL Card) or Mercuryo Spend.
+- It needs two Vercel environment variables: `LITHIC_API_KEY` (a sandbox key) and `CASHOUT_ADDRESS` (where the USDC goes). Without them the button stays hidden.
+- `node test-cashout.mjs` checks the receipt parsing against real Base Sepolia transfers. It needs no key.
+
 ## Findings worth knowing
 
 - **Plain commands work over NFC.** The Flex forwards SELECT AID to the app, and iOS sends plain ISO 7816 APDUs with a trailing Le. The SDK's `apdu_parser` rejects that trailing Le, so the app parses its own APDUs.

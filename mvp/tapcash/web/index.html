@@ -19,7 +19,7 @@
   header b { flex: 1; font-size: 20px; }
   .pill { background: var(--soft); color: var(--muted); font-size: 12px; font-weight: 500; border-radius: 999px; padding: 5px 10px; }
   .screen { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 16px; text-align: center; }
-  .screen[hidden] { display: none; }
+  .screen[hidden], .chip[hidden] { display: none; }
   .grow { flex: 1; }
   h2 { margin: 0; font-size: 28px; font-weight: 600; line-height: 1.2; }
   p { margin: 0; font-size: 15px; line-height: 1.4; color: var(--muted); }
@@ -114,6 +114,10 @@
   <div class="grow"></div>
   <div class="chip"><div><small>iPhone wallet balance</small><strong class="usdc"></strong></div></div>
   <button class="btn secondary" id="doneMove">Move to my Ledger</button>
+  <div class="chip" id="card" hidden><div><small id="cardLine"></small><strong id="cardLimit"></strong></div></div>
+  <p class="err" id="cashErr"></p>
+  <button class="btn secondary" id="cashout" hidden>Cash out to card</button>
+  <button class="btn secondary" id="coffee" hidden>Buy a $3.50 coffee</button>
   <button class="btn" id="newRequest">New request</button>
 </section>
 
@@ -304,5 +308,54 @@ $('moveBtn').onclick = async () => {
 $('tap').onclick = () => tap(1);
 $('tapAgain').onclick = () => tap(2);
 $('cancel').onclick = () => abort?.abort();
-$('newRequest').onclick = () => { amount = '0'; $('amount').textContent = '0'; $('tap').disabled = true; show('receive'); };
+$('newRequest').onclick = () => { resetCard(); amount = '0'; $('amount').textContent = '0'; $('tap').disabled = true; show('receive'); };
+
+// Cash out: send the whole USDC balance to the cash-out address, then api/cashout.mjs issues a
+// Lithic sandbox virtual card with that spend limit (test money, not a real card).
+const api = (body) => fetch('/api/cashout', body && { method: 'POST', headers: { 'content-type': 'application/json' },
+  body: JSON.stringify(body) }).then(r => r.json()).then(j => { if (j.error) throw new Error(j.error); return j; });
+let card = null, cashoutReady = false;  // button shows only where api/cashout is configured
+api().then(() => { cashoutReady = true; resetCard(); }, () => {});
+function resetCard() {
+  card = null;
+  $('card').hidden = $('coffee').hidden = true;
+  $('cashout').hidden = !cashoutReady;
+  $('cashout').disabled = false;
+  $('cashout').textContent = 'Cash out to card';
+  $('cashErr').textContent = '';
+  $('cashErr').style.color = '';
+}
+$('cashout').onclick = async () => {
+  const b = $('cashout');
+  b.disabled = true; $('cashErr').textContent = '';
+  try {
+    const { to } = await api();
+    const value = await pub.readContract({ address: USDC, abi: ABI, functionName: 'balanceOf', args: [account.address] });
+    if (value === 0n) throw new Error('No USDC to cash out');
+    b.textContent = `Sending ${formatUnits(value, 6)} USDC…`;
+    const hash = await wallet.writeContract({ address: USDC, abi: ABI, functionName: 'transfer', args: [to, value] });
+    await pub.waitForTransactionReceipt({ hash });
+    b.textContent = 'Issuing card…';
+    card = await api({ hash });
+    $('cardLine').textContent = `Virtual card •••• ${card.last4}  exp ${card.exp}  (sandbox)`;
+    $('cardLimit').textContent = `$${(card.cents / 100).toFixed(2)} to spend`;
+    $('card').hidden = $('coffee').hidden = false;
+    b.hidden = true;
+    await refresh();
+  } catch (e) {
+    $('cashErr').textContent = e.shortMessage || e.message;
+    b.disabled = false; b.textContent = 'Cash out to card';
+  }
+};
+$('coffee').onclick = async () => {
+  $('coffee').disabled = true;
+  try {
+    const { result } = await api({ card: card.card, cents: 350, merchant: 'TAPCASH CAFE' });
+    $('cashErr').textContent = result === 'APPROVED' ? 'Coffee: approved' : `Coffee: declined (${result})`;
+    $('cashErr').style.color = result === 'APPROVED' ? 'var(--lime-dark)' : '';
+  } catch (e) {
+    $('cashErr').textContent = e.message;
+  }
+  $('coffee').disabled = false;
+};
 </script>
