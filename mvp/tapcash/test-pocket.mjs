@@ -97,7 +97,9 @@ await sleep(1000);
 await press('Reject');
 await sleep(1500);
 const one = req(1);
-await assertSigned(one, await sign(one));
+const oneResp = await sign(one);
+await assertSigned(one, oneResp);
+assert.equal(await sign(one), oneResp);  // retry after the last payment turned pocket mode off
 await sleep(1000);
 assert.match(await screen(), /Paid 1 USDC/);
 await sleep(3000);

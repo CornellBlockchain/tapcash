@@ -363,12 +363,14 @@ static void handle_u2f_sign(uint8_t p1, const uint8_t *data, int lc) {
         return;
     }
 
+    // Checked before pocket_left: the last allowed payment turns pocket mode off
+    if (pocket_paid_valid && memcmp(kh, pocket_paid, REQ_LEN) == 0) {  // iOS retried a tap we already paid
+        io_send_response_pointer(response, response_len, SW_OK);
+        return;
+    }
+
     // Pocket mode: small payments are signed on this tap, without review. Not while a review is open.
     if (pocket_left && state != REVIEW) {
-        if (pocket_paid_valid && memcmp(kh, pocket_paid, REQ_LEN) == 0) {  // iOS retried a tap we already paid
-            io_send_response_pointer(response, response_len, SW_OK);
-            return;
-        }
         uint64_t value = read_u64_be(kh, 20);
         if (value <= USDC(PER_TAP_CAPS[per_tap_idx]) && value <= pocket_left) {
             memcpy(request, kh, REQ_LEN);
