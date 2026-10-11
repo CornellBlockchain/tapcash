@@ -76,9 +76,13 @@ def up(base=False):
     cfg = T.u64(T.CHAIN) + T.TOKEN
     assert payer.ui(D.INS["SET_CONFIG"], cfg, "live")[1] == 0x9000
     assert payee.ui(D.INS["SET_CONFIG"], cfg, "live")[1] == 0x9000
-    assert payer.ui(D.INS["LOAD_CASH"], T.u64(20 * D.USDC), "live")[1] == 0x9000
+    load = 20 * D.USDC
+    if base:  # load what the cash account really holds on the testnet (up to 20), so the cap matches the chain
+        line = next(x for x in D.node("balances.mjs", T.ADDR_PAYER)[1].splitlines() if T.ADDR_PAYER in x)
+        load = min(load, int(round(float(line.split()[1]) * D.USDC)))
+    assert payer.ui(D.INS["LOAD_CASH"], T.u64(load), "live")[1] == 0x9000
     STATE.write_text(json.dumps({"token": token, "base": base}))
-    print("READY. Payer screen http://127.0.0.1:16000 (20 USDC loaded) | Payee screen http://127.0.0.1:16010")
+    print(f"READY. Payer screen http://127.0.0.1:16000 ({load / D.USDC:g} USDC loaded) | Payee screen http://127.0.0.1:16010")
 
 
 def request(amount, label, auto):
