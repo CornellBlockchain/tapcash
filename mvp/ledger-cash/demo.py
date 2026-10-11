@@ -140,8 +140,10 @@ def run_tap(payer, payee, tag, approve=True, pull_on_review=False, cut_ins=None,
         payer.api("/finger", {"action": "press-and-release", "x": 240, "y": 434})  # Flex home: "Pay by tap"
     else:
         assert payer.apdu(INS["TAP_TO_PAY"])[1] == 0x9000
-    time.sleep(0.5)
-    assert tap_status(payer)[0] == 1  # waiting: "Hold near the payee"
+    t1 = time.time()
+    while tap_status(payer)[0] != 1:  # waiting: "Hold near the payee"
+        assert time.time() - t1 < 5, "reader never armed"
+        time.sleep(0.2)
     both(payer, payee, f"{tag}-hold-near")
     payer.api("/events", method="DELETE")
     stop = threading.Event()

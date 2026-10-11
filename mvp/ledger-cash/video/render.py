@@ -68,7 +68,7 @@ TERM_TWICE = TERM_SETTLE[2:] + ["# submit the same authorization again", grab(C,
 S = lambda n: n + ".png"
 P_HOME20, Q_HOME0, Q_REQ = S("11-payer-ready"), S("02-payee-boot"), S("10-payee-set-request-done")
 STEPS = [
-    ("Payer loads 20 USDC as cash", [(S("07-payer-load-cash"), Q_HOME0, [], 4), (P_HOME20, Q_HOME0, [], 3)]),
+    ("Payer loads 20 USDC into a device-capped cash account (a spending cap, not escrow)", [(S("07-payer-load-cash"), Q_HOME0, [], 4), (P_HOME20, Q_HOME0, [], 3)]),
     ("Payee asks for 5 USDC for coffee", [(P_HOME20, S("09-payee-set-request"), [], 4), (P_HOME20, Q_REQ, [], 3)]),
     ("Tap: payer's Ledger reads the request over NFC (emulated)",
      [(S("13-payer-tap1-hold-near"), Q_REQ, TERM_TAP[:2], 2.5), (S("13-payer-tap1-hold-near"), Q_REQ, TERM_TAP[:5], 2.5),
@@ -76,7 +76,7 @@ STEPS = [
     ("Payer reads it on the Secure Screen and holds to sign",
      [(S("17-payer-tap1"), Q_REQ, [], 4), (S("19-payer-tap1"), Q_REQ, [], 3), (S("21-payer-tap1"), Q_REQ, [], 3),
       (S("21-payer-tap1"), Q_REQ, TERM_SIGN, 4)]),
-    ("Paid offline. Payee holds a signed IOU",
+    ("Signed offline. Payee holds a signed IOU",
      [(S("23-payer-tap1-end"), S("24-payee-tap1-end"), TERM_SIGN[-1:] + TERM_PAID, 7)]),
     ("Tapping again is refused",
      [(S("25-payer-tap2-again-hold-near"), S("26-payee-tap2-again-hold-near"), TERM_AGAIN[:3], 3),
@@ -90,7 +90,8 @@ TITLE = "ledger-cash — tap-to-pay between two Ledgers (Speculos emulation, v0)
 END_LINES = [
     "What you saw is emulated NFC: two Speculos Ledger Flex instances joined by a patched NFC field.",
     "It has not yet run on hardware (real Ledger Flex NFC reader and card emulation).",
-    "The cash balance is a device-enforced cap, not escrow: nothing locks the USDC on-chain.",
+    "The ledger-cash app refuses to sign more than the loaded balance from a cash account no stock Ledger chain app can sign for.",
+    "That is a spending cap, not escrow: the payee cannot check on-chain solvency offline.",
     "Until settlement the payee holds a signed IOU and carries the credit risk.",
     "Settlement ran on a local anvil chain with a test USDC (EIP-3009) contract.",
 ]
@@ -131,7 +132,10 @@ def caption_bar(d, i, text):
     d.rectangle((0, 0, W, 140), fill="#20232a")
     d.rectangle((0, 136, W, 140), fill=ACCENT)
     d.text((50, 18), f"STEP {i} / {len(STEPS)}", font=BOLD(24), fill=ACCENT)
-    d.text((50, 50), text, font=BOLD(54), fill=FG)
+    size = 54
+    while BOLD(size).getlength(text) > W - 100:  # long captions shrink to fit the bar
+        size -= 2
+    d.text((50, 50), text, font=BOLD(size), fill=FG)
 
 
 def frame(i, cap, payer, payee, lines):

@@ -65,7 +65,9 @@ CURVE_APP_LOAD_PARAMS = secp256k1
 # and SLIP-0044 standards.
 # If your app needs it, you can specify multiple path by using:
 # `PATH_APP_LOAD_PARAMS = "44'/1'" "45'/1'"`
-PATH_APP_LOAD_PARAMS = "44'/60'"   # Ethereum path: device address == the user's ETH address
+# Dedicated cash account: coin type 0x4C434153 ("LCAS", unregistered in SLIP-44). No stock Ledger app may derive it,
+# and this app may derive nothing else. The key still gives a normal Ethereum address (USDC EIP-3009 settles as before).
+PATH_APP_LOAD_PARAMS = "44'/1279476051'"
 
 # Setting to allow building variant applications
 # - <VARIANT_PARAM> is the name of the parameter which should be set

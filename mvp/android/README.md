@@ -8,7 +8,7 @@ signs a USDC EIP-3009 `TransferWithAuthorization`, and hands it back. Settlement
 Two modes, one screen:
 
 1. **Phone payee.** The phone is the shop. It holds its own software secp256k1 key (made on first launch, stored in app-private storage), signs the request, checks the Flex's authorization (EIP-712 signer = `from`, `to` = this phone, amount, nonce = keccak of the request), stores it, and replies with a signed receipt. Shows "Got authorization (unsettled IOU) for X USDC from 0x…". That is a signed promise, not money yet (see Risks).
-2. **Nano bridge (blocked: no Nano S Plus build of ledger-cash yet, see B).** The phone is only an NFC antenna for a Ledger Nano S Plus on a USB OTG cable. The Nano runs the same ledger-cash app as the payee; the phone answers the NFC SELECT itself and passes every other APDU to the Nano over USB HID, then sends the Nano's answer back over NFC. This makes the Flex-to-Nano tap possible even though the Nano has no NFC.
+2. **Nano bridge (see B; uses the `ledger-cash-nanosplus` build).** The phone is only an NFC antenna for a Ledger Nano S Plus on a USB OTG cable. The Nano runs the same ledger-cash app as the payee; the phone answers the NFC SELECT itself and passes every other APDU to the Nano over USB HID, then sends the Nano's answer back over NFC. This makes the Flex-to-Nano tap possible even though the Nano has no NFC.
 
 Both modes list received authorizations and have a **Share** button that exports them as JSON
 (`[{from,to,value,validAfter,validBefore,nonce,v,r,s}, …]`), the format `settle.mjs` reads.
@@ -34,12 +34,13 @@ each approved on the Flex screen. Without them the Flex refuses every tap with `
 1. Chain: start anvil (`anvil`, or the docker line in `mvp/ledger-cash/settle/NOTES.md`), then in `mvp/ledger-cash/settle`:
    `npm ci && node deploy.mjs`. On a **fresh** anvil this prints token `0x5FbDB2315678afecb367f032d93F642f64180aa3`,
    chainId `31337`, which are the phone app's defaults. Otherwise use the values from `settle/deploy.json` everywhere below.
-2. Flex: NFC on in its Settings; ledger-cash sideloaded and **open**; plugged into the laptop by USB; **Ledger Live closed** (it holds the USB interface). `pip install ledgerblue`,
+2. Flex: NFC on in its Settings; ledger-cash sideloaded and **open**; plugged into the laptop by USB; **Ledger Wallet (formerly Ledger Live) closed** (it holds the USB interface). `pip install ledgerblue`,
    then run this and approve "Set USDC network", then "Load 10 USDC as cash", on the Flex:
    ```
    python -c "from ledgerblue.comm import getDongle; d=getDongle(True); [d.exchange(bytes.fromhex(a), 60000) for a in ('E01200001C0000000000007A695FbDB2315678afecb367f032d93F642f64180aa3', 'E0200000080000000000989680')]; print('Flex address 0x' + bytes(d.exchange(bytes.fromhex('E021000000')))[12:32].hex())"
    ```
-   Bytes: `E0 12 00 00 1C` + chainId u64 BE (`31337` = `0000000000007A69`) + token (20). `E0 20 00 00 08` + amount u64 BE in
+   The printed address is the Flex's **cash account** (`44'/1279476051'/0'/0/0`), which no stock Ledger chain app can sign for (dedicated derivation path),
+   not one of its Ethereum app accounts. Bytes: `E0 12 00 00 1C` + chainId u64 BE (`31337` = `0000000000007A69`) + token (20). `E0 20 00 00 08` + amount u64 BE in
    6-decimal units (10 USDC = `0000000000989680`). `E0 21 00 00 00` answers balance u64 ‖ pay counter u32 ‖ address (bytes 12..31).
    Not run against a device (no Flex here); these are the same APDUs `mvp/ledger-cash/demo.py` sends to the emulated Flex.
 3. Fund that address on chain: `node fund.mjs 0x<Flex address> 10`. The Flex's cash counter and its on-chain USDC are
@@ -57,20 +58,20 @@ each approved on the Flex screen. Without them the Flex refuses every tap with `
 4. The Flex should show Pay 1 USDC, To = the phone address, For = coffee. Approve on the Flex. Keep the devices together until the Flex says done.
 5. The phone shows a toast and status line "Got authorization (unsettled IOU) for 1 USDC from 0x<Flex address>"; the list gains one entry.
 6. Tap **Share received auths**, send the JSON to the laptop, save it as `auths.json`, then in `mvp/ledger-cash/settle`: `node settle.mjs auths.json`. Expect `#0 success tx 0x…` and the balances moving.
-7. Negative checks: tap again without re-arming → the Flex gets SW `B006` (the phone disarms a paid request; a Nano payee in mode B keeps serving it, so there the Flex refuses with its own `B004` "already paid"). Change the amount on the phone after the Flex has read the request → the Flex's auth is refused with `B005`.
+7. Negative checks: tap again without re-arming → the Flex gets SW `B006` and shows "Payee has no request" (the phone disarms a paid request; a Nano payee in mode B does the same, because a successful `PUT_AUTH` drops its request, so the Nano answers `GET_REQUEST` with `B006` too). Change the amount on the phone after the Flex has read the request → the Flex's auth is refused with `B005`.
 
-**B. Nano bridge (Flex + Android + Sahas's Nano S Plus): blocked today**
+**B. Nano bridge (Flex + Android + Sahas's Nano S Plus)**
 
-Mode B cannot be tested yet: `mvp/ledger-cash/app/ledger_app.toml` builds only `flex`, `stax`, `apex_p`, and `cash.c`
-calls the NFC reader API (`io_nfc_reader_*`, `os_io_nfc_cmd_start_ce`) without `#ifdef HAVE_NFC_READER` guards, so a
-`nanos2` build will probably not compile. It needs the C track to add `nanos2` and guard the tap-to-pay code. The
-Android bridge side needs no change. Steps for when that build exists:
+The Nano build exists: CI artifact `ledger-cash-nanosplus` (`device-apps` workflow), sideloaded as in
+`mvp/ledger-cash/HARDWARE.md` A5. On the Nano the tap code is compiled out (`TAP_TO_PAY`/`TAP_STATUS` answer `6D00`),
+and its USB path accepts exactly what the bridge forwards: `GET_REQUEST` and `PUT_AUTH` (the phone answers SELECT
+itself). Tested only on two emulated Nano S Plus (`mvp/ledger-cash/app/test_nano.py`), not through a phone. Steps:
 
-1. Nano S Plus: unlock it, install and open the ledger-cash app built for `nanosplus`.
+1. Nano S Plus: unlock it, install and open the ledger-cash app (`ledger-cash-nanosplus`).
 2. Plug the Nano into the phone with a **USB OTG adapter** (USB-C phone → USB-C/A to the Nano cable). Android offers to open Ledger Cash Payee for the device: accept (this also grants USB access). Or tap **Connect Nano** and allow the permission dialog, then tap **Connect Nano** again.
 3. Status: "Nano connected: … Mode: Nano bridge."
 4. Enter chainId, token, amount, label. Tap **Arm request on Nano**. On the Nano approve **Set USDC network**, then **Request 1 USDC**. Status: "Nano armed."
-5. Tap the Flex to the phone as in A3–A4. The Nano shows "Received 1 USDC"; the phone shows "Nano got authorization (unsettled IOU) for 1 USDC from 0x…".
+5. Tap the Flex to the phone as in A3–A4. The Nano shows "IOU 1 USDC from 0x…… Not settled yet"; the phone shows "Nano got authorization (unsettled IOU) for 1 USDC from 0x…".
 6. Share and settle as in A6. (The Nano also keeps the last 8 auths; `GET_AUTHS 0x24` over USB from a laptop reads them.)
 
 **If nothing happens on tap:** check the phone's NFC is on and the screen unlocked; check that the Flex's reader sends `SELECT 00 A4 04 00 0C F04C45444745524341534801` (Le optional; cash.c sends none) before its `E0` commands (Android routes by that SELECT only); move the Flex slowly over the back of the phone to find the antenna.

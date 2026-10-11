@@ -1,5 +1,11 @@
 # ledger-cash device app v0 (stage B): NOTES
 
+> Update (cash account, 2026-10-10): the app's key moved from 44'/60'/0'/0/0 to the dedicated cash path
+> 44'/1279476051'/0'/0/0 (`PATH_APP_LOAD_PARAMS = "44'/1279476051'"` only). Test fixtures are now payer
+> `0x46cE8565DD320e3764aa33cbdA7024F469132354`, payee `0xb1124942BA3CeB48d87Dac9baBc50ca3B50A72db`; the 0x153a... /
+> 0x9858... addresses and the app.sha256 values below are history. New hashes: flex `9c8cfe79...bcd57`, nanos2
+> `4733ab55...a10de` (full values in ../HARDWARE.md and ../NOTES.md).
+
 ## Nano S Plus + CI stage (2026-10-11): PASS
 
 Status: **PASS.** `TARGET=nanos2` builds (exit 0, 0 warnings), `python -u test_nano.py` prints `ALL PASS` on two
@@ -23,7 +29,7 @@ HEAD's cash.c (built from `git archive HEAD` in a scratch dir) and for the new o
 ```bash
 MSYS_NO_PATHCONV=1 docker run --rm --memory 1g --name v1-build \
   -v "C:/Users/sahas/Github Repos/ledger-op3n-n3xt-hackathon-26/mvp/ledger-cash/app:/app" \
-  ghcr.io/ledgerhq/ledger-app-builder/ledger-app-dev-tools:latest \
+  ghcr.io/ledgerhq/ledger-app-builder/ledger-app-dev-tools@sha256:8d3da9179dd1b241883c769c521ee9403352b60091c80405b5bef5801a003ba2 \
   make -C /app TARGET=nanos2 BOLOS_SDK=/opt/nanosplus-secure-sdk APP_DIR=/app -j4     # ~20 s, exit 0
 # flex unchanged: TARGET=flex BOLOS_SDK=/opt/flex-secure-sdk
 # SDK dirs in the image: /opt/{nanos,nanox,nanosplus,flex,stax,apex}-secure-sdk
@@ -81,7 +87,7 @@ Payee after PUT_AUTH: "IOU 5 USDC from | 0x153A...61415 | Not settled yet"
 
 ### CI: `.github/workflows/device-apps.yml`
 On push to `ledger-cash`/`main` touching `mvp/ledger-cash/app/**` (or the workflow file), and `workflow_dispatch`.
-Matrix job in `container: ghcr.io/ledgerhq/ledger-app-builder/ledger-app-dev-tools:latest` (`--user root`): checkout,
+Matrix job in `container: ghcr.io/ledgerhq/ledger-app-builder/ledger-app-dev-tools@sha256:8d3da9179dd1b241883c769c521ee9403352b60091c80405b5bef5801a003ba2` (`--user root`): checkout,
 `git config --global --add safe.directory '*'`, `make -C mvp/ledger-cash/app TARGET=<t> BOLOS_SDK=/opt/<sdk>-secure-sdk
 APP_DIR=$GITHUB_WORKSPACE/mvp/ledger-cash/app`. APP_DIR must be explicit: with git working, the SDK would set it to
 the **repo root**. Artifacts **`ledger-cash-flex`** and **`ledger-cash-nanosplus`**, each flat: `app.elf app.apdu
@@ -109,7 +115,7 @@ stax and apex_p also compile (exit 0), not run.
 ## Layout
 
 - `src/cash.c`: the whole app (IO loop, dispatcher, handlers, ecrecover, EIP-712 digest, NVM, NBGL screens). The rest of the C boilerplate (swap, token, transaction, ui, helpers) is deleted.
-- `Makefile`: boilerplate with `APPNAME "Ledger Cash"`, `PATH_APP_LOAD_PARAMS "44'/60'"`, `ENABLE_NFC=1 ENABLE_NFC_READER=1 DISABLE_OS_IO_STACK_USE=1`, no Bluetooth/TLV/PKI/test-swap. `ledger_app.toml`: flex, stax, apex_p.
+- `Makefile`: boilerplate with `APPNAME "Ledger Cash"`, `PATH_APP_LOAD_PARAMS "44'/1279476051'"` (was `"44'/60'"` until the cash-account change, see ../NOTES.md), `ENABLE_NFC=1 ENABLE_NFC_READER=1 DISABLE_OS_IO_STACK_USE=1`, no Bluetooth/TLV/PKI/test-swap. `ledger_app.toml`: flex, stax, apex_p.
 - `test.py`: end-to-end test. `screens/`: Flex screenshots from the passing run. Icons are still the boilerplate's.
 
 ## Build (Git Bash, from anywhere)
@@ -119,7 +125,7 @@ The path with a space works as a bind mount. The SDK runs `git rev-parse --show-
 ```bash
 MSYS_NO_PATHCONV=1 docker run --rm --memory 1g --name lc-b-build \
   -v "C:/Users/sahas/Github Repos/ledger-op3n-n3xt-hackathon-26/mvp/ledger-cash/app:/app" \
-  ghcr.io/ledgerhq/ledger-app-builder/ledger-app-dev-tools:latest \
+  ghcr.io/ledgerhq/ledger-app-builder/ledger-app-dev-tools@sha256:8d3da9179dd1b241883c769c521ee9403352b60091c80405b5bef5801a003ba2 \
   make -C /app TARGET=flex BOLOS_SDK=/opt/flex-secure-sdk APP_DIR=/app -j4
 # stax: TARGET=stax BOLOS_SDK=/opt/stax-secure-sdk     apex_p: TARGET=apex_p BOLOS_SDK=/opt/apex-secure-sdk
 ```

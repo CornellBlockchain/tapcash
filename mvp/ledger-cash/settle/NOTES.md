@@ -49,7 +49,7 @@ Also asserted: `TRANSFER_WITH_AUTHORIZATION_TYPEHASH() == 0x7c7c6cdb67a18743f49e
 
 ## Signing key = the Speculos spike seed
 `spikes/speculos-dmk-sign/speculos.sh` SEED is **23 words** and fails the BIP39 checksum, so viem `mnemonicToAccount` throws `Invalid mnemonic` (first test run failed on this). Speculos just runs BIP39 PBKDF2 on the text, so `test.mjs` does the same:
-`hdKeyToAccount(HDKey.fromMasterSeed(pbkdf2Sync(SEED.normalize('NFKD'), 'mnemonic', 2048, 64, 'sha512')))` -> `0x153a5aA5E15f13C92760B65AAE8cCfa7C5161415` (asserted; equals the spike's device `getAddress(44'/60'/0'/0/0)`).
+`hdKeyToAccount(HDKey.fromMasterSeed(pbkdf2Sync(SEED.normalize('NFKD'), 'mnemonic', 2048, 64, 'sha512')), { path: "m/44'/1279476051'/0'/0/0" })` -> `0x46cE8565DD320e3764aa33cbdA7024F469132354` (asserted; the ledger-cash app's dedicated cash key, cash.c `PATH`). Before 2026-10-10 the app used 44'/60'/0'/0/0, which gives `0x153a5aA5E15f13C92760B65AAE8cCfa7C5161415`; `fixture.json` was regenerated with the cash key (`node test.mjs`, ALL PASS, 2026-10-10).
 Any later stage deriving this key in JS must do the same, not `mnemonicToAccount`.
 
 ## Auth JSON format (what Stage B / Integrate must emit)

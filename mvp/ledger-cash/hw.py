@@ -2,7 +2,7 @@
 
 python hw.py version                 dashboard only: target id + OS version (0x33100004 Nano S Plus, 0x33300004 Flex)
 python hw.py setup anvil|base [usdc]  SET_CONFIG (approve on device), LOAD_CASH usdc (default 10; 0 = skip), balance
-python hw.py balance                 GET_BALANCE: cash, pay counter, device address
+python hw.py balance                 GET_BALANCE: cash, pay counter, cash-account address (44'/1279476051'/0'/0/0)
 python hw.py selfpay [usdc] [label]  one device pays itself: SET_REQUEST, GET_REQUEST, PAY, PUT_AUTH, PAY again (B004)
 python hw.py auths [file]            GET_AUTHS slots 0..7 -> JSON for settle/settle.mjs (default device-auths.json)
 python hw.py tap                     Flex: TAP_TO_PAY, then poll TAP_STATUS until the tap ends (Ctrl-C stops)
@@ -18,6 +18,7 @@ NETS = {"anvil": (31337, "5FbDB2315678afecb367f032d93F642f64180aa3"),  # first d
         "base": (84532, "036CbD53842c5426634e7929541eC2318f3dCF7e")}   # Base Sepolia USDC (name USDC, version 2)
 STATE = ["idle", "waiting for card", "busy", "sent PUT_AUTH", "PAID", "FAILED", "SIGNED, NO RECEIPT"]
 SW = {0x9000: "ok", 0x6985: "rejected on device", 0x6D00: "unknown INS", 0x6A82: "unknown AID", 0x6A88: "no such slot",
+      0x6700: "wrong length", 0x6A80: "bad data", 0x6E00: "wrong CLA", 0xB0FF: "crypto failure",
       0x511F: "OS too old for this app", 0xB001: "bad payee signature", 0xB002: "not configured / wrong network",
       0xB003: "not enough cash", 0xB004: "already paid", 0xB005: "bad auth", 0xB006: "no request", 0xB007: "busy",
       0xB008: "card removed", 0xB009: "payee did not answer"}

@@ -139,3 +139,15 @@ Sahas: "i don't just mean nfc research, i mean ledger research in general". Eigh
   - Honest limits: the loaded cash is a device counter, not escrowed USDC; validBefore never expires (no clock); payee keeps 8 auths; nothing hardware-verified.
 - `mvp/android/` (CI green, run 38097791301, APK artifact `ledger-cash-payee-debug-apk` 3.4 MB): HCE payee mode + Nano S Plus USB-OTG bridge mode; JVM unit tests for request encode/sign, EIP-712 digest, Ledger HID framing.
 - `mvp/tangem/` + `research/tangem-protocol.md`: Tangem wire protocol (clean-room from MIT snapshots `cdf62aacbe`, `05eabcc908`), `tangem.c` reader module (SELECT, Read card, Read wallet, Sign) with ASan/UBSan unit tests and a Python mock card. **Licence decision pending (Sahas):** current Tangem SDK licence §4 forbids recreating the protocol for unauthorised apps. Pay-to-Tangem needs a pay-to-address path + USB outbox in `cash.c` (next round).
+
+## 2026-10-11 ~03:30 — v1 hardware-ready + fixes
+
+- **Nano S Plus build** of ledger-cash (USB only; tap paths under `#ifdef HAVE_NFC_READER`): `app/test_nano.py` ALL PASS on emulated Nano S Plus (payer + payee + anvil settlement), 37 screenshots in `screens/nano/`.
+- **Device-app CI** (`.github/workflows/device-apps.yml`): builds `ledger-cash-flex` and `ledger-cash-nanosplus` artifacts (elf, apdu, hex, sha256, LOAD.txt) on GitHub. First run green (38101875903). Build image pinned by digest `ledger-app-dev-tools@sha256:8d3da917…`.
+- **Dedicated cash key**: signing moved from `44'/60'` to `m/44'/1279476051'/0'/0/0` (coin type 0x4C434153 "LCAS", not in SLIP-44); `PATH_APP_LOAD_PARAMS = "44'/1279476051'"` only. The stock Ethereum app (locked to `44'/60'`, `45'`, BLS) and every chain clone cannot sign for the cash account. Remaining hole, documented: a sideloaded app declaring the same path, or the seed imported into a software wallet. Closing it = attestation (v1 rung) + escrow (v2 rung). New fixture addresses: payer `0x46cE8565DD320e3764aa33cbdA7024F469132354`, payee `0xb1124942BA3CeB48d87Dac9baBc50ca3B50A72db`. Expected hashes: flex `9c8cfe79…bfbcd57`, nanos2 `4733ab55…1fa10de` (independently reproduced locally).
+- **`mvp/ledger-cash/HARDWARE.md`**: ordered checklists. A = Sahas (Nano S Plus, Windows, alone). B = collaborator (Flex + Android: Gate 1 reader powers on / CARD_DETECTED with a bank card; Gate 2 full pay flow against the Android payee APK; Gate 3 settle on anvil or Base Sepolia). C = Paris-only Android bridge to the Nano. Fallback if Flex NFC fails.
+- **Backup video** `mvp/ledger-cash/video/ledger-cash-demo.mp4` (1080p, 83.5 s, honest end card).
+- **DX-FEEDBACK.md §11**: 15 NFC/toolchain findings with evidence and fixes.
+- Wording audit: "cash" always qualified (device-capped spending cap, signed IOU, not escrow). Flaky tap-arm wait in demo.py replaced by a bounded poll; two consecutive ALL PASS runs.
+- Fixed my own bug: an earlier IDEAS.md edit duplicated the whole body; now one copy.
+- Open: `app/test.py` (stage B) not re-run on the new path (needs two containers at once); `app/test-run.log` shows old addresses. Tangem licence decision pending.

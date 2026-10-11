@@ -27,7 +27,7 @@ for help. It was tested against emulated devices (2026-10-11):
 |---|---|
 | `hw.py version` | **Run on the dashboard, with no app open.** Prints the target ID and OS version: `0x33100004` is the Nano S Plus, `0x33300004` the Flex. |
 | `hw.py setup anvil [usdc]` / `setup base [usdc]` | SET_CONFIG (approve on the device), then LOAD_CASH (default 10; `0` skips it), then prints the balance. |
-| `hw.py balance` | Prints the cash, the pay counter and the device's address (`44'/60'/0'/0/0`, the same as Ledger's Ethereum app account 1). |
+| `hw.py balance` | Prints the cash, the pay counter and the device's **cash account** address (`44'/1279476051'/0'/0/0`). No stock Ledger chain app can sign for it (dedicated path; a sideloaded app declaring the same path or a seed import could); it is not any of your Ethereum app accounts. |
 | `hw.py selfpay [usdc] [label]` | The device pays itself: SET_REQUEST, GET_REQUEST, PAY, PUT_AUTH, then the same PAY again, which must give `B004`. |
 | `hw.py auths [file]` | Reads the payee's stored auths (GET_AUTHS) into a JSON file for `settle.mjs`. The default file is `device-auths.json`. |
 | `hw.py tap` | **Flex only.** Sends TAP_TO_PAY, then polls TAP_STATUS and prints every state change until the tap ends. |
@@ -44,8 +44,12 @@ screen, so you can always run `hw.py status` after a tap.
 |---|---|
 | 9000 | ok |
 | 6985 | rejected on the device |
-| 6D00 | unknown INS (TAP_* on a Nano) |
+| 6D00 | unknown INS (TAP_* on a Nano), or not allowed over NFC |
+| 6E00 | wrong CLA (not `E0`) |
+| 6700 | wrong length |
+| 6A80 | bad data (amount 0, bad label, balance overflow) |
 | 6A82 | unknown AID |
+| 6A88 | no auth in that GET_AUTHS slot |
 | B001 | bad payee signature |
 | B002 | not configured, or the request is for another network |
 | B003 | not enough cash |
@@ -55,19 +59,28 @@ screen, so you can always run `hw.py status` after a tap.
 | B007 | busy (a review is on screen) |
 | B008 | card removed |
 | B009 | payee did not answer |
+| B0FF | crypto failure on the device |
 | 511F | the device OS is too old for this app |
 
+**The cash account.** Both ledger-cash keys (payer, and the payee's request signer) are `44'/1279476051'/0'/0/0`
+(coin type `0x4C434153`, "LCAS", not in SLIP-44). The app may derive only `44'/1279476051'`, and no stock Ledger app
+may derive it (no stock Ledger chain app), so the address `hw.py balance` prints is a separate account that no stock Ledger chain app can sign for. It is a
+normal Ethereum address: fund it with USDC on-chain, and `LOAD_CASH` sets how much of it the device spends offline.
+The addresses in `screens/` are the emulator seeds' cash accounts; yours differ.
+
 **Builds** (Docker SDK API_LEVEL 27, which needs **OS 1.7.0** on both the Flex and the Nano S Plus; `nanos+_1.4.1` is
-API 24 and gives `0x511F`):
+API 24 and gives `0x511F`). Built with the pinned image
+`ghcr.io/ledgerhq/ledger-app-builder/ledger-app-dev-tools@sha256:8d3da9179dd1b241883c769c521ee9403352b60091c80405b5bef5801a003ba2`:
 
 | Device | Artifact | `app.sha256` (contents of the file) | targetId |
 |---|---|---|---|
-| Flex | `ledger-cash-flex` | `0a6c6cf932faa2dd034c577323d860d8830072ef2722f9c40ce05f8127b28589` | `0x33300004` |
-| Nano S Plus | `ledger-cash-nanosplus` | `7e5cd26f837fb807b53a92aa4b4d098ac2296646e1166feb4333a4add1a01925` | `0x33100004` |
+| Flex | `ledger-cash-flex` | `9c8cfe79ceb043e3ef728eaa12f117e8a17d92e35cb639be3fb0a0887bfbcd57` | `0x33300004` |
+| Nano S Plus | `ledger-cash-nanosplus` | `4733ab55e296422951864ea7843e98f723a47004c7295c1f42cd48faa1fa10de` | `0x33100004` |
 
 The CI workflow `device-apps` (GitHub Actions, job `ledger-cash`) builds both on every push to `ledger-cash` that
-touches `mvp/ledger-cash/app/**`. **It has never run yet**: it runs on the first push after this file. The repo is
-**private**, so the collaborator needs to be invited before they can clone the repo or download artifacts. On the
+touches `mvp/ledger-cash/app/**` (or the workflow file); the push that adds the dedicated cash path touches both, so it
+starts the first run. The repo is **private**, so the collaborator must accept the invitation before they can clone the
+repo or download artifacts. On the
 first run, check that each artifact's `app.sha256` matches the table. The `.apdu` starts by deleting any app named
 "Ledger Cash", so loading again replaces an older install without a manual uninstall.
 
@@ -103,15 +116,22 @@ Raw APDUs, in case `hw.py` is not at hand (CLA E0):
 Every command runs in **Windows PowerShell**, from the repo folder unless a step says otherwise.
 
 ### A0. Unblock the collaborator (5 min, do this first)
-1. Invite the collaborator to the private repo: GitHub, then **Settings → Collaborators → Add people**. They need
-   this to clone the repo, download the Flex and APK artifacts, and get `hw.py` and `settle/`.
+1. The collaborator (`hrishabhayush`) was invited on 2026-10-10 with write access. Check that they accepted (no output
+   from the first command, and their login in the second):
+   ```powershell
+   gh api repos/Sahas266/ledger-op3n-n3xt-hackathon-26/invitations --jq '.[].invitee.login'
+   gh api repos/Sahas266/ledger-op3n-n3xt-hackathon-26/collaborators --jq '.[].login'
+   ```
+   They need access to clone the repo, download the Flex and APK artifacts, and get `hw.py` and `settle/`.
 2. Check that the orchestrator's push started the CI:
    ```powershell
    gh run list -R Sahas266/ledger-op3n-n3xt-hackathon-26 -b ledger-cash -L 5
    ```
-   Expected: a `device-apps` run with status `completed success`, next to the `android` runs. If none is listed, start
-   it with `gh workflow run device-apps -R Sahas266/ledger-op3n-n3xt-hackathon-26 --ref ledger-cash`. If it failed,
-   send `gh run view <id> --log-failed` to the orchestrator.
+   Expected: a `device-apps` run with status `completed success`, next to the `android` runs. If none is listed:
+   `gh workflow run device-apps -R Sahas266/ledger-op3n-n3xt-hackathon-26 --ref ledger-cash` works once the workflow
+   has run at least once on the branch. Before that, GitHub does not know the workflow yet; push any commit that
+   touches `mvp/ledger-cash/app/**` instead. If the run failed, send `gh run view <id> --log-failed` to the
+   orchestrator.
 3. Send the collaborator the link to this file.
 
 ### A1. Quit Ledger Wallet fully
@@ -126,10 +146,7 @@ whenever you have used Ledger Wallet in between (for example in A2).
 ### A2. Check the Nano OS version (needs 1.7.0)
 1. Open Ledger Wallet, plug in the Nano, unlock it, open **My Ledger** and allow it on the Nano. The OS (firmware)
    version is shown next to the device. If it is older than 1.7.0, update it there. Write down the version.
-2. Quit Ledger Wallet again (A1).
-3. A cross-check without Ledger Wallet comes after A3: with the Nano unlocked on the dashboard (no app open), run
-   `& $py mvp\ledger-cash\hw.py version`. Expected: `target 0x33100004, OS 1.7.0`. This command has not been run on a
-   device. If it errors, the Ledger Wallet reading is enough.
+2. Quit Ledger Wallet again (A1). A cross-check without Ledger Wallet is at the end of A3.
 
 If the Nano is not on 1.7.0 and cannot be updated, the install in A5 will fail with `511f`. Stop there, and ask the
 mentors on Monday for an SDK build for the Nano's API level.
@@ -144,13 +161,17 @@ Expected: `ok`. If the venv is missing, create a fresh one:
 `py -3 -m venv $HOME\lc-venv; $py = "$HOME\lc-venv\Scripts\python.exe"; & $py -m pip install ledgerblue`.
 Set `$py` again in every new PowerShell window.
 
+Cross-check of the OS version (A2), now that `$py` exists: with the Nano unlocked on the dashboard (no app open), run
+`& $py mvp\ledger-cash\hw.py version`. Expected: `target 0x33100004, OS 1.7.0`. This command has not been run on a
+device. If it errors, the Ledger Wallet reading is enough.
+
 ### A4. Get the Nano build
 Use one of these, in this order:
 1. **The local build**, which already exists: `mvp\ledger-cash\app\build\nanos2\bin\`. Check it:
    ```powershell
    Get-Content mvp\ledger-cash\app\build\nanos2\bin\app.sha256
    ```
-   Expected: `7e5cd26f837fb807b53a92aa4b4d098ac2296646e1166feb4333a4add1a01925`.
+   Expected: `4733ab55e296422951864ea7843e98f723a47004c7295c1f42cd48faa1fa10de`.
 2. **The CI artifact**, once A0.2 is green:
    ```powershell
    gh run download -R Sahas266/ledger-op3n-n3xt-hackathon-26 -n ledger-cash-nanosplus -D $HOME\lc-nanosplus
@@ -159,7 +180,7 @@ Use one of these, in this order:
    not reproducible: note it and still use the CI artifact.
 3. **A rebuild**, from Git Bash:
    ```bash
-   MSYS_NO_PATHCONV=1 docker run --rm --memory 1g --name v1-build -v "$(pwd -W)/mvp/ledger-cash/app:/app" ghcr.io/ledgerhq/ledger-app-builder/ledger-app-dev-tools:latest make -C /app TARGET=nanos2 BOLOS_SDK=/opt/nanosplus-secure-sdk APP_DIR=/app -j4
+   MSYS_NO_PATHCONV=1 docker run --rm --memory 1g --name v1-build -v "$(pwd -W)/mvp/ledger-cash/app:/app" ghcr.io/ledgerhq/ledger-app-builder/ledger-app-dev-tools@sha256:8d3da9179dd1b241883c769c521ee9403352b60091c80405b5bef5801a003ba2 make -C /app TARGET=nanos2 BOLOS_SDK=/opt/nanosplus-secure-sdk APP_DIR=/app -j4
    ```
 
 ### A5. Sideload
@@ -193,7 +214,9 @@ For any other error, send back the full output and a photo of the screen.
 Opening an app re-enumerates the USB device, so wait about 5 s before the next command.
 
 ### A7. USB flow (about 10 min), comparing with `screens/nano/`
-From `mvp\ledger-cash`:
+From `mvp\ledger-cash`. Label note: the emulator run behind `screens/nano/` used the label
+`coffee-and-croissant-x2` (it tests the 24-character limit), so its "For" pages wrap to two lines. With `coffee` the
+same pages show one line; everything else matches.
 ```powershell
 cd "C:\Users\sahas\Github Repos\ledger-op3n-n3xt-hackathon-26\mvp\ledger-cash"
 & $py hw.py balance
@@ -205,7 +228,8 @@ cd "C:\Users\sahas\Github Repos\ledger-op3n-n3xt-hackathon-26\mvp\ledger-cash"
 & $py hw.py auths nano-auths.json
 ```
 
-1. **`hw.py balance`.** Expected: `SW 9000`, cash 0, pay counter 0, and the Nano's address.
+1. **`hw.py balance`.** Expected: `SW 9000`, cash 0, pay counter 0, and the Nano's cash account address. It differs
+   from the Nano's Ethereum app accounts: that is intended.
 2. **`hw.py status`.** Expected: `SW 6D00`. That is correct: the Nano has no NFC, so the tap commands do not exist.
 3. **`hw.py setup anvil`.** Approve twice.
    - SET_CONFIG pages, the same as screenshots 03-07:
@@ -222,7 +246,8 @@ cd "C:\Users\sahas\Github Repos\ledger-op3n-n3xt-hackathon-26\mvp\ledger-cash"
    - Payer pages, the same as screenshots 30-36:
      1. "Pay with USDC cash"
      2. "Pay | 5 USDC"
-     3. "To", with the full 42-character address on ONE page over 3 lines. It is the Nano's own address.
+     3. "To", with the full 42-character address on ONE page over 3 lines. It is the Nano's own cash account (the
+        address `hw.py balance` printed).
      4. "For | coffee"
      5. "Cash left after | 5 USDC"
      6. **"Pay 5 USDC?"**: press both buttons to sign. There is no hold-to-sign on the Nano.
@@ -253,8 +278,9 @@ docker rm -f v1-anvil
 git status --short .                     # deploy.json unchanged on a fresh anvil
 ```
 
-These auths are bound to chainId 31337 and the anvil token, so they can never move funds on another chain. Only ever
-approve the `anvil` or `base` configs on this device: the Nano key is your real Ethereum account 1.
+These auths are bound to chainId 31337 and the anvil token, so they can never move funds on another chain. The Nano
+signs from its cash account (`44'/1279476051'/0'/0/0`), not from your Ethereum app accounts, and that account holds only
+what you send to it. Still, only ever approve the `anvil` or `base` configs on this device.
 
 ### A9. Tangem inventory on the iPhone (read-only)
 Open the Tangem app and scan each card: hold it to the top of the back of the iPhone. **Do not** reset, create a
@@ -294,7 +320,24 @@ Bring the Nano, a USB-C OTG adapter and a **data** cable.
 Commands are given for **Windows PowerShell** and for **macOS/Linux**. Every `hw.py` command runs in
 `mvp/ledger-cash` of the cloned repo. `$py` (Windows) and `$PY` (macOS/Linux) are set in B3.
 
-### B0. Get the repo (after Sahas invites you)
+### B-1. Prerequisites
+1. **Accept the repo invitation** (sent to `hrishabhayush` on 2026-10-10, write access):
+   https://github.com/Sahas266/ledger-op3n-n3xt-hackathon-26/invitations. Until you do, cloning and
+   `gh run download` fail with "not found".
+2. **Install gh, git and Python 3** (and, for B8 Option A only, Node 20+ and Docker):
+   ```powershell
+   winget install --id GitHub.cli -e; winget install --id Git.Git -e; winget install --id Python.Python.3.12 -e
+   winget install --id OpenJS.NodeJS.LTS -e     # B8 Option A only
+   ```
+   ```bash
+   brew install gh git python@3.12 node                        # macOS (Homebrew)
+   sudo apt update && sudo apt install -y gh git python3 python3-venv nodejs npm   # Debian/Ubuntu
+   ```
+   Open a new terminal afterwards so the new commands are on PATH. On Ubuntu older than 22.04, `gh` is not in apt:
+   follow https://github.com/cli/cli/blob/trunk/docs/install_linux.md. Check with `gh --version`, `git --version` and
+   `python --version` (`python3` on macOS/Linux).
+
+### B0. Get the repo (after B-1)
 ```powershell
 gh auth login; gh repo clone Sahas266/ledger-op3n-n3xt-hackathon-26 -- -b ledger-cash; cd ledger-op3n-n3xt-hackathon-26\mvp\ledger-cash
 ```
@@ -354,7 +397,7 @@ Push-Location $HOME\lc-flex; & $py -m ledgerblue.runScript --scp --fileName app.
 gh run download -R Sahas266/ledger-op3n-n3xt-hackathon-26 -n ledger-cash-flex -D ~/lc-flex && cat ~/lc-flex/app.sha256
 (cd ~/lc-flex && $PY -m ledgerblue.runScript --scp --fileName app.apdu --elfFile app.elf)
 ```
-- The hash must be `0a6c6cf932faa2dd034c577323d860d8830072ef2722f9c40ce05f8127b28589`.
+- The hash must be `9c8cfe79ceb043e3ef728eaa12f117e8a17d92e35cb639be3fb0a0887bfbcd57`.
 - If the download finds no artifact, CI has not run yet: ask Sahas to zip `mvp/ledger-cash/app/build/flex/bin/`
   (`app.apdu`, `app.elf`, `app.sha256`) and send it.
 - During the sideload, the Flex asks to allow an unsafe manager ("Allow unsafe manager"). Approve it on the
@@ -377,7 +420,11 @@ gh run download -R Sahas266/ledger-op3n-n3xt-hackathon-26 -n ledger-cash-flex -D
    - then "Load 10 USDC as cash / Cash after: 10 USDC".
 5. Expected output: `SW 9000` twice, then `cash 10 USDC, pay counter 0, address 0x…`.
 
-Send that address to Sahas: it gets funded at settlement.
+**Safety:** only approve a "Set USDC network" screen that shows Chain ID **31337** with token `0x5FBD…0AA3` (anvil) or
+Chain ID **84532** with token `0x036C…CF7E` (Base Sepolia). Reject anything else.
+
+That address is the Flex's **cash account** (`44'/1279476051'/0'/0/0`), not one of its Ethereum app accounts. Send it
+to Sahas: it gets funded at settlement.
 
 ### B6. GATE 1: does the reader power on, and does CARD_DETECTED fire?
 You need a **contactless bank card**. It answers ISO-DEP. A transit or hotel card may not.
@@ -449,15 +496,18 @@ power the reader, then go to [the fallback](#if-nfc-fails-on-the-real-flex).
    6. Expected status: `Armed: 1 USDC "coffee". Hold the Flex to the phone.`
    7. Keep the screen **on and unlocked**, with the app in front.
 3. **Tap.** Run `hw.py tap` (or press **Pay by tap**). Lay the phone face down on the table and put the Flex on its
-   NFC spot, screen up. Slide it slowly to find the spot. **Keep the devices together until the Flex says "Paid".**
-4. **Expected on the Flex**, the same as `screens/15-*` to `23-*`:
-   1. "Reading request"
-   2. "Pay with USDC cash"
-   3. "Pay 1 USDC / To 0x<phone payee address> / For coffee". **Check that To matches the phone.**
-   4. "Cash left after 9 USDC"
-   5. "Pay 1 USDC?" with **Hold to sign**: hold it.
-   6. "Sending payment"
-   7. **"Paid 1 USDC to 0x…"**
+   NFC spot, screen up, using the side of the Flex that worked in B6. Slide it slowly to find the spot. **Keep the
+   devices together until the Flex says "Paid".**
+4. **Expected on the Flex**, as in the emulator screenshots (which show 5 USDC, cash 15 and the emulator payee):
+   1. "Hold near the payee": `screens/13-payer-tap1-hold-near.png`
+   2. "Reading request" (a spinner, not captured)
+   3. "Pay with USDC cash": `screens/15-payer-tap1.png`
+   4. "Pay 1 USDC / To 0x<phone payee address> / For coffee": `screens/17-payer-tap1.png`. **Check that To matches the
+      phone.**
+   5. "Cash left after 9 USDC": `screens/19-payer-tap1.png`
+   6. "Pay 1 USDC?" with **Hold to sign**: `screens/21-payer-tap1.png`. Hold it.
+   7. "Sending payment" (not captured)
+   8. **"Paid 1 USDC to 0x…"**: `screens/23-payer-tap1-end.png`
 5. **Expected on the phone:** a toast, and the status `Got authorization (unsettled IOU) for 1 USDC from
    0x<Flex address>`. The list gains one entry.
 6. **Expected from `hw.py`:** `tap state 4 = PAID, tap SW 9000`, then `auth -> tap-auth.json`.
@@ -483,8 +533,9 @@ power the reader, then go to [the fallback](#if-nfc-fails-on-the-real-flex).
 - `tap-auth.json`.
 
 ### B8. GATE 3: settle what the phone received
-On the phone, tap **Share received auths** and send the JSON to the laptop as `phone-auths.json`. Then use one of
-two options.
+On the phone, tap **Share received auths** and send the JSON to the laptop. Save it as
+**`mvp/ledger-cash/settle/phone-auths.json`**: every command below runs in `mvp/ledger-cash/settle` and reads the file
+from there. Then use one of two options.
 
 **Option A, anvil (default).** Anyone can run it on a fresh anvil: Sahas on his PC, or you with Docker and Node 20+.
 From `mvp/ledger-cash/settle`:
@@ -524,7 +575,7 @@ address differs, anvil was not fresh: restart it.
    - Flex: `hw.py setup base 0`, then approve "Set USDC network / Chain ID 84532 / USDC 0x036C…". The cash counter
      is kept. Keep it at or below the on-chain USDC.
    - Phone: chainId `84532`, token `0x036CbD53842c5426634e7929541eC2318f3dCF7e`. Arm 1 USDC again, tap as in B7,
-     then share the auths again as `base-auths.json`.
+     then share the auths again and save them as `mvp/ledger-cash/settle/base-auths.json`.
 5. **Settle.** If the shared JSON still holds the anvil auth from B7, that one is refused with `invalid signature`,
    which is expected (exit code 1).
    ```powershell
@@ -564,11 +615,10 @@ Follow `mvp/android/README.md` section **B** ("Nano bridge") steps 1-6, with the
    (approve twice on the Nano)**. On the Nano, approve "Set USDC network" and then "Request 1 USDC | For: coffee".
 3. On the Flex, start a tap (`hw.py tap` or **Pay by tap**) and tap the phone.
    - Expected on the Flex: the same review as B7, with **To = the Nano's address**, then "Paid 1 USDC to 0x…".
-   - Expected on the Nano (the README's "Received 1 USDC" is out of date): **"IOU 1 USDC from | 0x…… | Not settled
-     yet"**.
+   - Expected on the Nano: **"IOU 1 USDC from | 0x…… | Not settled yet"**.
    - Expected on the phone: "Nano got authorization (unsettled IOU) for 1 USDC from 0x…".
-4. Settle: share from the phone, or plug the Nano into a laptop and run `hw.py auths nano-auths.json`. Then use B8
-   Option A.
+4. Settle: share from the phone (save as `mvp/ledger-cash/settle/phone-auths.json`), or plug the Nano into a laptop
+   and run `hw.py auths settle/nano-auths.json` from `mvp/ledger-cash`. Then use B8 Option A with that file.
 
 Timing risk: the Flex waits 2 s for GET_REQUEST and 5 s for the receipt, and the bridge adds USB round trips. A
 `B009` on the Flex means the bridge was too slow. If the Nano is showing a review when the Flex asks, the Flex gets
@@ -578,7 +628,7 @@ Timing risk: the Flex waits 2 s for GET_REQUEST and 5 s for the receipt, and the
 
 ## If NFC fails on the real Flex
 
-The submission still stands on what is verified:
+The submission still stands on what is emulated, plus the USB-only flows once they run on the devices:
 1. **The emulator video:** `mvp/ledger-cash/video/ledger-cash-demo.mp4`. It shows the full Ledger-to-Ledger tap on
    two emulated Flex devices (patched Speculos NFC reader, `demo.py` ALL PASS), including the refusals and the
    settlement on anvil. Say plainly that it is emulated.

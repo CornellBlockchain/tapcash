@@ -111,7 +111,7 @@ New: `demo.py`, `README.md`, this file, `auths.json`, and `screens/` (51 PNGs, b
 cd "C:/Users/sahas/Github Repos/ledger-op3n-n3xt-hackathon-26/mvp/ledger-cash"
 MSYS_NO_PATHCONV=1 docker run --rm --memory 1g --name lc-i-build \
   -v "C:/Users/sahas/Github Repos/ledger-op3n-n3xt-hackathon-26/mvp/ledger-cash/app:/app" \
-  ghcr.io/ledgerhq/ledger-app-builder/ledger-app-dev-tools:latest \
+  ghcr.io/ledgerhq/ledger-app-builder/ledger-app-dev-tools@sha256:8d3da9179dd1b241883c769c521ee9403352b60091c80405b5bef5801a003ba2 \
   make -C /app TARGET=flex BOLOS_SDK=/opt/flex-secure-sdk APP_DIR=/app -j4      # exit 0, about 20 s, no warnings
 # same with TARGET=stax BOLOS_SDK=/opt/stax-secure-sdk -> exit 0 (compiled only, not run)
 python -u demo.py 2>&1 | tee demo-run.log                                       # about 1 min, ends ALL PASS
@@ -162,3 +162,63 @@ The chain state is carried across with `anvil_dumpState` / `anvil_loadState` ove
   routing, reader -> CE mode switch, whether the field stays up during a long review).
 - The tap has no overall timeout. "Hold near the payee" waits until a card arrives or the user presses Cancel.
 - The card UID is ignored (it may be stale with the own IO stack).
+
+## Cash account, honest wording, pinned builder (2026-10-10): PASS
+
+Status: **PASS** in emulation. `python -u demo.py` (Flex) and `python -u app/test_nano.py` (Nano S Plus) both print
+`ALL PASS` (`demo-run.log`, `app/test_nano-run.log`); `settle/test.mjs` also passes on a fresh anvil. Nothing touched
+hardware. Nothing committed.
+
+### What changed
+- **Dedicated cash key.** `app/src/cash.c` `PATH` is `44'/1279476051'/0'/0/0` (`{0x8000002C, 0xCC434153, 0x80000000,
+  0, 0}`) for both the payer key and the payee's request/receipt signer. `app/Makefile` declares only
+  `PATH_APP_LOAD_PARAMS = "44'/1279476051'"` (44'/60' dropped), so the OS lets ledger-cash derive nothing else, and no
+  stock Ledger chain app may derive this path (app-ethereum: `44'/60'`, `45'`, `12381/3600`; clones: their own coin
+  type). The built `.apdu` carries `8000002CCC434153` in its install parameters.
+  - **Coin type:** the task gave `1279475027` next to `0x4C434153` ("LCAS"); they disagree (`1279475027` =
+    `0x4C433D53`, "LC=S"). Used the hex intent, **`0x4C434153` = 1279476051**. Neither value is in the SLIP-44 registry
+    (`slip-0044.md` fetched 2026-10-10; no row for 1279476051 or 1279475027).
+  - The address is a normal Ethereum address, so EIP-3009 settlement is unchanged.
+  - **Remaining hole (documented):** the path lock binds the key to any app that declares the path. The owner can
+    sideload another app declaring `44'/1279476051'`, or import the seed into a software wallet, and sign outside the
+    cap; closing that for a payee needs attestation (v1) plus escrow (v2). The path lock is an OS check; Speculos runs
+    show the derivation, not the lock.
+- **Fixtures** (`app/test.py`, derived with `eth_account` `HDPath(...).derive(Mnemonic.to_seed(seed))`, no BIP-39
+  checksum check): payer `0x46cE8565DD320e3764aa33cbdA7024F469132354` (was `0x153a5a...61415`), payee
+  `0xb1124942BA3CeB48d87Dac9baBc50ca3B50A72db` (was `0x9858Ef...EDA94`). demo.py and test_nano.py read them from
+  test.py. `settle/test.mjs` derives the same payer path (`hdKeyToAccount(..., { path })`); `fixture.json`,
+  `auths.json`, `auths-bad-domain.json` in `settle/` regenerated.
+- `hw.py`: SW names for 6700, 6A80, 6E00, B0FF; `balance` help names the cash account.
+- **Wording** (README intro, Honest limits, Cash ladder v0/v1 rows and Q&A, IDEAS.md team decision and the
+  primitives line): "the ledger-cash app refuses to sign more than the loaded balance from a cash account only it can
+  sign for (dedicated derivation path); the payee still cannot check on-chain solvency offline". New README section
+  "The cash account" (fund it on-chain, LOAD_CASH sets the offline spend). README Status links HARDWARE.md and
+  video/ledger-cash-demo.mp4; the recorded output block is the new `demo-run.log`.
+- **Builder pinned** to `ghcr.io/ledgerhq/ledger-app-builder/ledger-app-dev-tools@sha256:8d3da9179dd1b241883c769c521ee9403352b60091c80405b5bef5801a003ba2`
+  (the local `:latest` was this digest) in `.github/workflows/device-apps.yml`, README, HARDWARE.md, this file,
+  app/NOTES.md, speculos-nfc/NOTES.md. LOAD.txt: "Close Ledger Wallet (formerly Ledger Live)".
+- **HARDWARE.md:** new hash table; cash-account paragraph in Shared facts; SW rows 6E00/6700/6A80/6A88/B0FF; A0.1
+  invitation check (hrishabhayush, invited 2026-10-10, write); A0.2 fallback (`gh workflow run` only after one run on
+  the branch, else push a commit touching `mvp/ledger-cash/app/**`); `hw.py version` cross-check moved after A3; A7
+  label note (`coffee-and-croissant-x2` in screens/nano vs `coffee`); "account 1" wording replaced; B-1 Prerequisites
+  (invitation link, winget/brew/apt installs); B5 safety note (approve only 31337/anvil token or 84532/Base Sepolia
+  USDC); B7.3 "the side of the Flex that worked in B6"; B7.4 exact screenshot names (13, 15, 17, 19, 21, 23); B8 and C
+  save shared auths in `mvp/ledger-cash/settle/`.
+- **mvp/android/README.md:** Nano bridge no longer blocked (`ledger-cash-nanosplus`; USB path takes GET_REQUEST and
+  PUT_AUTH); A7 fixed: a Nano payee also answers `B006` after a paid PUT_AUTH (`put_auth` clears `g_req_valid`), so
+  the Flex shows "Payee has no request", not `B004`; B5 Nano screen is "IOU 1 USDC from 0x… Not settled yet".
+- **Video:** `video/render.py` STEPS[0] "Payer loads 20 USDC into a device-capped cash account (a spending cap, not
+  escrow)", STEPS[4] "Signed offline. Payee holds a signed IOU", end card in the new wording; the caption font shrinks
+  to fit the bar. Re-rendered: ffprobe `h264 1920x1080 yuv420p 83.5 s`; frames at steps 1, 4, 6 and the end card
+  checked by eye.
+- `screens/` and `screens/nano/` regenerated by the two runs (new addresses on the To, Receive and IOU screens).
+
+### Builds (pinned image, clean `build/<target>`)
+| target | app.sha256 |
+|---|---|
+| flex | `9c8cfe79ceb043e3ef728eaa12f117e8a17d92e35cb639be3fb0a0887bfbcd57` |
+| nanos2 (Nano S Plus) | `4733ab55e296422951864ea7843e98f723a47004c7295c1f42cd48faa1fa10de` |
+
+CI has not built these yet; the first `device-apps` run on this change should reproduce them.
+- Not re-run: `app/test.py` (stage B, starts two containers at once). Its fixture addresses are the new ones and
+  demo.py imports them, so it passes by construction; `app/test-run.log` still shows the old addresses.

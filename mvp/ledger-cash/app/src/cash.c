@@ -144,7 +144,9 @@ static uint8_t g_tap_auth[AUTH_LEN];     // last auth signed by a tap (kept if n
 static uint8_t g_tap_cmd[5 + AUTH_LEN];  // PUT_AUTH command sent to the card
 #endif
 
-static const uint32_t PATH[] = {0x8000002C, 0x8000003C, 0x80000000, 0, 0};  // 44'/60'/0'/0/0
+// Dedicated cash key: 44'/1279476051'/0'/0/0 (coin type 0x4C434153 "LCAS", not in SLIP-44). The Makefile allows
+// only this prefix, so this app derives nothing else and no stock Ledger app can derive this key.
+static const uint32_t PATH[] = {0x8000002C, 0xCC434153, 0x80000000, 0, 0};
 
 static void ui_home(void);
 #ifdef HAVE_NFC_READER

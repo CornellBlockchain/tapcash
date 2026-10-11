@@ -15,10 +15,10 @@ SCREENS = HERE / "screens"
 IMAGE = "ghcr.io/ledgerhq/speculos@sha256:028d1e368244631578537e7ca50b6f13ca2932b5f3fd220627289b559c07a886"  # pinned: speculos-nfc/seproxyhal.py is a patched copy of this exact image
 SEED_PAYER = "glory promote mansion idle axis finger extra february uncover one trip resource lawn turtle enact monster seven myth punch hobby comment base bet"
 SEED_PAYEE = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about"
-# 44'/60'/0'/0/0 of each seed: payer from the spike run (eth_account rejects the Speculos mnemonic),
-# payee = eth_account Account.from_mnemonic(SEED_PAYEE) (well-known test vector)
-ADDR_PAYER = "0x153a5aA5E15f13C92760B65AAE8cCfa7C5161415"
-ADDR_PAYEE = "0x9858EfFD232B4033E47d90003D41EC34EcaEda94"
+# The cash key 44'/1279476051'/0'/0/0 of each seed (cash.c PATH), from eth_account without the BIP-39 checksum check
+# (the Speculos seed fails it): Account.from_key(HDPath("m/44'/1279476051'/0'/0/0").derive(Mnemonic.to_seed(seed)))
+ADDR_PAYER = "0x46cE8565DD320e3764aa33cbdA7024F469132354"
+ADDR_PAYEE = "0xb1124942BA3CeB48d87Dac9baBc50ca3B50A72db"
 CHAIN = 31337
 TOKEN = bytes.fromhex("5FbDB2315678afecb367f032d93F642f64180aa3")  # first anvil deployment address
 SECP_N = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141

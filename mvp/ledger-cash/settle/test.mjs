@@ -10,9 +10,9 @@ import { HDKey, hdKeyToAccount } from 'viem/accounts';
 
 const SEED = 'glory promote mansion idle axis finger extra february uncover one trip resource lawn turtle enact monster seven myth punch hobby comment base bet';
 // The spike's Speculos seed is 23 words (fails the BIP39 checksum, so viem's mnemonicToAccount throws).
-// Speculos just runs BIP39 PBKDF2 on the text, so do the same, then 44'/60'/0'/0/0.
-const payer = hdKeyToAccount(HDKey.fromMasterSeed(pbkdf2Sync(SEED.normalize('NFKD'), 'mnemonic', 2048, 64, 'sha512')));
-assert.equal(payer.address, '0x153a5aA5E15f13C92760B65AAE8cCfa7C5161415');
+// Speculos just runs BIP39 PBKDF2 on the text, so do the same, then the cash key 44'/1279476051'/0'/0/0 (cash.c PATH).
+const payer = hdKeyToAccount(HDKey.fromMasterSeed(pbkdf2Sync(SEED.normalize('NFKD'), 'mnemonic', 2048, 64, 'sha512')), { path: "m/44'/1279476051'/0'/0/0" });
+assert.equal(payer.address, '0x46cE8565DD320e3764aa33cbdA7024F469132354');
 const PAYEE = '0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC'; // anvil (2), any address works
 
 const run = (...args) => {

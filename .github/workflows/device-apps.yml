@@ -10,7 +10,7 @@ jobs:
   ledger-cash:
     runs-on: ubuntu-latest
     container:
-      image: ghcr.io/ledgerhq/ledger-app-builder/ledger-app-dev-tools:latest
+      image: ghcr.io/ledgerhq/ledger-app-builder/ledger-app-dev-tools@sha256:8d3da9179dd1b241883c769c521ee9403352b60091c80405b5bef5801a003ba2
       options: --user root
     strategy:
       fail-fast: false
@@ -38,7 +38,7 @@ jobs:
           Ledger Cash, ${{ matrix.artifact }} (TARGET=${{ matrix.target }}, targetId ${{ matrix.target_id }})
           commit ${{ github.sha }}, app.sha256 $(cat out/app.sha256)
 
-          Close Ledger Live, plug the device in by USB, unlock it, stay on the dashboard. From this folder:
+          Close Ledger Wallet (formerly Ledger Live), plug the device in by USB, unlock it, stay on the dashboard. From this folder:
             pip install ledgerblue
             python3 -m ledgerblue.runScript --scp --fileName app.apdu --elfFile app.elf
           (Windows: python instead of python3. --elfFile reads targetId ${{ matrix.target_id }} from the ELF;

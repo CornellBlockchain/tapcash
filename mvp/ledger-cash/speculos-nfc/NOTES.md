@@ -73,7 +73,7 @@ done
 for d in lc-a-probe lc-a-card; do
   MSYS_NO_PATHCONV=1 docker run --rm --name lc-a-build --memory 1g \
     -e GIT_CONFIG_COUNT=1 -e GIT_CONFIG_KEY_0=safe.directory -e GIT_CONFIG_VALUE_0='*' \
-    -v "C:/lgw/$d:/app" ghcr.io/ledgerhq/ledger-app-builder/ledger-app-dev-tools:latest \
+    -v "C:/lgw/$d:/app" ghcr.io/ledgerhq/ledger-app-builder/ledger-app-dev-tools@sha256:8d3da9179dd1b241883c769c521ee9403352b60091c80405b5bef5801a003ba2 \
     make -C /app TARGET=flex BOLOS_SDK=/opt/flex-secure-sdk -j4
 done
 ```
