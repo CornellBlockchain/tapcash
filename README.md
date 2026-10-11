@@ -74,8 +74,6 @@ Status (honest):
 | [mvp/android/](mvp/android/) | Android payee app (HCE), plus a bridge that makes a phone the NFC antenna for a USB Nano S Plus (APK built in GitHub Actions) |
 | [mvp/tangem/](mvp/tangem/) | Tangem card protocol module and mock card (not wired in; licence question open) |
 | [mvp/nfc-probe/](mvp/nfc-probe/) | Compile gate for the Flex NFC reader API |
-| [PITCH.md](PITCH.md) | Talk track, slide outline, demo plan, jury Q&A, submission drafts |
-| [DX-FEEDBACK.md](DX-FEEDBACK.md) | The required developer-experience write-up |
 | [HACKATHON.md](HACKATHON.md) | The brief, rubric and submission steps |
 | [WORKLOG.md](WORKLOG.md) | Chronological record of the work |
 | [research/](research/) | Sourced notes: NFC reader mode, USDC/EIP-3009 on Ledger, source audit, Vanadium, Tangem protocol, prior art, and the wider Ledger stack |
