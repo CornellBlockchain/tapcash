@@ -1,0 +1,16 @@
+{
+  "shop": "Corner Cafe",
+  "currency": "USDC",
+  "items": [
+    {"id": "espresso",    "name": "espresso",        "price": "2.20", "aliases": ["espresso", "short black"]},
+    {"id": "flat_white",  "name": "flat white",      "price": "3.20", "aliases": ["flat white", "flatwhite"]},
+    {"id": "cappuccino",  "name": "cappuccino",      "price": "3.30", "aliases": ["cappuccino", "cappucino", "capp"]},
+    {"id": "latte",       "name": "latte",           "price": "3.50", "aliases": ["latte", "cafe latte"]},
+    {"id": "tea",         "name": "tea",             "price": "2.40", "aliases": ["tea", "black tea", "green tea"]},
+    {"id": "croissant",   "name": "croissant",       "price": "2.60", "aliases": ["croissant", "croissants"]},
+    {"id": "muffin",      "name": "muffin",          "price": "2.90", "aliases": ["muffin", "blueberry muffin"]},
+    {"id": "sandwich",    "name": "sandwich",        "price": "6.50", "aliases": ["sandwich", "toastie"]},
+    {"id": "oat_milk",    "name": "oat milk",   "price": "0.40", "extra": true, "aliases": ["oat milk", "oat"]},
+    {"id": "extra_shot",  "name": "extra shot", "price": "0.60", "extra": true, "aliases": ["extra shot", "double shot"]}
+  ]
+}

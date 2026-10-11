@@ -1,0 +1,6 @@
+provider openrouter, model openai/gpt-4.1-mini
+order: 'could I grab a couple of flat whites, one with oat, plus a croissant and a double espresso'
+LLM tool call ring_up -> {'flat_white': 2, 'oat_milk': 1, 'croissant': 1, 'espresso': 1, 'extra_shot': 1}
+offline parser       -> {'flat_white': 1, 'oat_milk': 1, 'croissant': 1, 'espresso': 1}
+total 12.200000 USDC (computed in code from menu.json), label '2 flat white +2'
+PASS

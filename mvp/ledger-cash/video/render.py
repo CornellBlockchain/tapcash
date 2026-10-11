@@ -1,4 +1,5 @@
-"""Render the ledger-cash backup demo video from screens/ and demo-run.log.
+"""Render the ledger-cash backup demo video from screens/ (+ screens/till, screens/agent), demo-run.log and
+agent/agent_demo-run.log.
 
     cd mvp/ledger-cash/video && python render.py
 
@@ -11,6 +12,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(HERE)
 SCREENS = os.path.join(ROOT, "screens")
 LOG = os.path.join(ROOT, "demo-run.log")
+AGENT_LOG = os.path.join(ROOT, "agent", "agent_demo-run.log")
 FRAMES = os.path.join(HERE, "frames")
 OUT = "ledger-cash-demo.mp4"
 FPS = 2  # ponytail: still slides, so 2 source fps; ffmpeg outputs 30
@@ -31,17 +33,21 @@ def font(name, size):
 SANS, BOLD, MONO = (lambda s: font("segoeui.ttf", s)), (lambda s: font("segoeuib.ttf", s)), (lambda s: font("consola.ttf", s))
 
 # ---- terminal excerpts, taken from demo-run.log by section ----
-log = open(LOG, encoding="utf-8").read()
-sections = {m.group(1): m.group(2).splitlines() for m in re.finditer(r"^== (.+?)\n(.*?)(?=^== |^ALL PASS)", log, re.S | re.M)}
+def parse(path):
+    log = open(path, encoding="utf-8").read()
+    return {m.group(1): m.group(2).splitlines() for m in re.finditer(r"^== (.+?)\n(.*?)(?=^== |^ALL PASS)", log, re.S | re.M)}
 
 
-def sec(prefix):
-    return next(v for k, v in sections.items() if k.startswith(prefix))
+sections, agent_sections = parse(LOG), parse(AGENT_LOG)  # separate: both logs have a "3. chain" section
 
 
-def grab(prefix, needle, n=0):
+def grab(prefix, needle, n=0, secs=sections):
     """n-th line in section `prefix` containing `needle`, stripped."""
-    return [l.strip() for l in sec(prefix) if needle in l][n]
+    return [l.strip() for l in next(v for k, v in secs.items() if k.startswith(prefix)) if needle in l][n]
+
+
+def agrab(prefix, needle, n=0):
+    return grab(prefix, needle, n, agent_sections)
 
 
 def short(line):
@@ -63,9 +69,22 @@ C = "3. chain"
 TERM_SETTLE = ["# online, later: GET_AUTHS from payee, then", "# settle.mjs -> USDC.transferWithAuthorization (anvil)",
                grab(C, "success tx"), grab(C, "from "), grab(C, "to   ")]
 TERM_TWICE = TERM_SETTLE[2:] + ["# submit the same authorization again", grab(C, "REJECTED")]
+O1, AC = "order 1", "3. chain"
+TERM_ORDER = ["# merchant types the order (this run: offline keyword parser, no LLM call;",
+              "#  the LLM path is recorded in agent/agent_demo-llm-run.log)", "== " + next(k for k in agent_sections if k.startswith(O1)),
+              agrab(O1, "parsed by"), agrab(O1, "x flat white"), agrab(O1, "x croissant"), agrab(O1, "x oat milk"),
+              agrab(O1, "total "), "# SET_REQUEST to the merchant's Ledger, which shows it for approval",
+              agrab(O1, "[payee] Request")]
+TERM_IOU = ["# after the tap: GET_AUTHS, EIP-712 signature checked off-device", agrab("tap 1", "slot 0")]
+TERM_BOOKS = ["# online: pre-check each IOU (balance, nonce), then settle", agrab(AC, "relayer key source"),
+              agrab(AC, "settled 0x"), agrab(AC, "INSUFFICIENT"), agrab(AC, "never submitted"),
+              "# payer tops up the cash account; the agent retries",
+              grab("payer tops up", "settled 0x", secs=agent_sections)]
 
 # ---- storyboard: (caption, [(payer png, payee png, terminal lines, seconds), ...]) ----
 S = lambda n: n + ".png"
+TILL = ["# no host: Request payment -> amount keypad", "#   -> cents -> label list -> Approve on screen",
+        "# the payee then waits for a tap"]
 P_HOME20, Q_HOME0, Q_REQ = S("11-payer-ready"), S("02-payee-boot"), S("10-payee-set-request-done")
 STEPS = [
     ("Payer loads 20 USDC into a device-capped cash account (a spending cap, not escrow)", [(S("07-payer-load-cash"), Q_HOME0, [], 4), (P_HOME20, Q_HOME0, [], 3)]),
@@ -85,6 +104,16 @@ STEPS = [
      [(S("23-payer-tap1-end"), S("24-payee-tap1-end"), TERM_SETTLE[:2], 2.5),
       (S("23-payer-tap1-end"), S("24-payee-tap1-end"), TERM_SETTLE, 6)]),
     ("Settling twice is rejected", [(S("23-payer-tap1-end"), S("24-payee-tap1-end"), TERM_TWICE, 7)]),
+    ("The merchant can also key a request in on the payee Ledger (on-device till, separate run)",
+     [(P_HOME20, S("till/09-payee-keypad-usdc"), TILL, 2), (P_HOME20, S("till/11-payee-labels"), TILL, 2),
+      (P_HOME20, S("till/12-payee-confirm"), TILL, 3), (P_HOME20, S("till/13-payee-waiting"), TILL, 2)], "till_demo.py (on-device screens; no host commands)"),
+    ("AI till agent: a typed order becomes a priced request the merchant approves",
+     [(P_HOME20, S("agent/07-payee-agent-request-approve"), TERM_ORDER[:7], 3),
+      (P_HOME20, S("agent/07-payee-agent-request-approve"), TERM_ORDER, 5),
+      (S("agent/19-payer-agent-tap1-end"), S("agent/20-payee-agent-tap1-end"), TERM_IOU, 3)], "agent_demo.py log (excerpt)"),
+    ("AI till agent online: pre-check, settle what is covered, flag the rest",
+     [(S("agent/33-payer-agent-tap2-end"), S("agent/34-payee-agent-tap2-end"), TERM_BOOKS[:4], 3),
+      (S("agent/33-payer-agent-tap2-end"), S("agent/34-payee-agent-tap2-end"), TERM_BOOKS, 6)], "agent_demo.py log (excerpt)"),
 ]
 TITLE = "ledger-cash — tap-to-pay between two Ledgers (Speculos emulation, v0)"
 END_LINES = [
@@ -94,6 +123,7 @@ END_LINES = [
     "That is a spending cap, not escrow: the payee cannot check on-chain solvency offline.",
     "Until settlement the payee holds a signed IOU and carries the credit risk.",
     "Settlement ran on a local anvil chain with a test USDC (EIP-3009) contract.",
+    "The till agent used its offline parser and a labelled env-var relayer key (Key Ring not yet provisioned).",
 ]
 FOOTER = "Speculos emulation (two virtual Ledger Flex) · NFC field emulated · settlement on local anvil · not yet run on hardware"
 
@@ -110,17 +140,17 @@ def device(img, x, label, name):
     img.paste(Image.open(os.path.join(SCREENS, name)).convert("RGB").resize((DW, DH), Image.LANCZOS), (x, DY))
 
 
-def terminal(img, lines):
+def terminal(img, lines, src):
     d = ImageDraw.Draw(img)
     d.rounded_rectangle((TERM_X, DY - 10, TERM_X + TERM_W, DY + DH + 10), 14, fill=TERM_BG)
-    d.text((TERM_X + 20, DY + 6), "demo.py log (excerpt)", font=BOLD(22), fill=TERM_DIM)
+    d.text((TERM_X + 20, DY + 6), src, font=BOLD(22), fill=TERM_DIM)
     f, y = MONO(21), DY + 50
     cols = int((TERM_W - 40) / f.getlength("0"))
     for raw in lines:
         color = TERM_DIM if raw.startswith("#") and not raw.startswith("#0") else TERM_FG
-        if any(k in raw for k in ("PAID:", "success", "-> 5.0", "-> 95.0")):
+        if any(k in raw for k in ("PAID:", "success", "-> 5.0", "-> 95.0", "settled 0x", "unsettled IOU")):
             color = TERM_OK
-        if any(k in raw for k in ("REJECTED", "NOTHING PAID", "b006")):
+        if any(k in raw for k in ("REJECTED", "NOTHING PAID", "b006", "INSUFFICIENT", "NON-LEDGER")):
             color = TERM_BAD
         for part in textwrap.wrap(short(raw), cols, subsequent_indent="  ") or [""]:
             d.text((TERM_X + 20, y), part, font=f, fill=color)
@@ -138,13 +168,13 @@ def caption_bar(d, i, text):
     d.text((50, 50), text, font=BOLD(size), fill=FG)
 
 
-def frame(i, cap, payer, payee, lines):
+def frame(i, cap, payer, payee, lines, src):
     img = Image.new("RGB", (W, H), BG)
     d = ImageDraw.Draw(img)
     caption_bar(d, i, cap)
     device(img, PAYER_X, "Payer Flex  ·  NFC reader", payer)
     device(img, PAYEE_X, "Payee Flex  ·  NFC card", payee)
-    terminal(img, lines)
+    terminal(img, lines, src)
     d.text((50, H - 70), FOOTER, font=SANS(26), fill=MUTED)
     return img
 
@@ -153,7 +183,7 @@ def card(title, lines, title_size=60):
     img = Image.new("RGB", (W, H), BG)
     d = ImageDraw.Draw(img)
     d.rectangle((0, 0, W, 12), fill=ACCENT)
-    y = 330 if not lines else 230
+    y = 330 if not lines else 190
     for t in textwrap.wrap(title, 48):
         d.text((W // 2, y), t, font=BOLD(title_size), fill=FG, anchor="ma")
         y += int(title_size * 1.3)
@@ -182,19 +212,19 @@ def main():
 
     emit(card(TITLE, ["Payer's Ledger reads a payment request over NFC, shows it on the Secure Screen,",
                       "signs a USDC transfer authorization offline, and hands it to the payee's Ledger."]), 6)
-    for i, (cap, shots) in enumerate(STEPS, 1):
+    for i, (cap, shots, *src) in enumerate(STEPS, 1):
         for payer, payee, lines, secs in shots:
-            emit(frame(i, cap, payer, payee, lines), secs)
+            emit(frame(i, cap, payer, payee, lines, src[0] if src else "demo.py log (excerpt)"), secs)
     emit(card("Honest limits of this demo", END_LINES, 56), 10)
     print(f"{n} frames = {n / FPS:.1f} s")
 
     env = dict(os.environ, MSYS_NO_PATHCONV="1")
     vol = ["-v", f"{HERE.replace(os.sep, '/')}:/work", "-w", "/work"]
     base = ["docker", "run", "--rm", "--memory", "1g"]
-    subprocess.run(base + ["--name", "v1-ffmpeg-render"] + vol + ["jrottenberg/ffmpeg:6.1-alpine", "-y", "-loglevel", "error",
+    subprocess.run(base + ["--name", "ta-ffmpeg-render"] + vol + ["jrottenberg/ffmpeg:6.1-alpine", "-y", "-loglevel", "error",
                    "-framerate", str(FPS), "-i", "frames/%05d.png", "-c:v", "libx264", "-threads", "2", "-r", "30", "-pix_fmt", "yuv420p",
                    "-crf", "20", "-movflags", "+faststart", OUT], check=True, env=env)
-    subprocess.run(base + ["--name", "v1-ffprobe-check", "--entrypoint", "ffprobe"] + vol + ["jrottenberg/ffmpeg:6.1-alpine",
+    subprocess.run(base + ["--name", "ta-ffprobe-check", "--entrypoint", "ffprobe"] + vol + ["jrottenberg/ffmpeg:6.1-alpine",
                    "-v", "error", "-show_entries", "stream=codec_name,width,height,pix_fmt:format=duration", "-of", "default=nw=1", OUT],
                    check=True, env=env)
 

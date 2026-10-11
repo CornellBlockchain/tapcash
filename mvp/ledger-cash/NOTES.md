@@ -526,3 +526,178 @@ attested), `screens/nano/38-payee-put-attest.png`.
   decision (README "Attested IOUs").
 - Stax / Apex P not compiled; CI has not built `69873224...` / `63e3c196...`; the video still shows the old screens.
 - The interop track's recorded Android transcript is unaffected: an unarmed payer sends no E025.
+
+## AI till agent (2026-10-11): PASS in emulation
+
+The brief requires an AI component, and this adds one on the merchant's side: `agent/` (see `agent/README.md`). The
+agent turns an order into `SET_REQUEST` (the merchant approves on the Ledger), then runs `GET_AUTHS`, verifies each
+EIP-712 signature off-device, risk-checks on-chain (`balanceOf`, `authorizationState`), settles through `settle.mjs`
+and keeps a CSV. The relayer key comes from the Ledger Key Ring (`wallet-cli ring decrypt --key relayer`) or from the
+labelled `RELAYER_KEY` env fallback. Nothing committed. `cash.c` and the ELF are unchanged.
+
+### What was established before writing
+- Host: `openai` 2.29.0 installed; `faster_whisper`, `sounddevice` and `ledgerblue` are **not** installed. The
+  faster-whisper `small.en` model is in the HF cache (`models--Systran--faster-whisper-small.en`). Voice is therefore
+  untested here, and the agent prints `pip install faster-whisper sounddevice` instead of installing anything.
+- `cash.c` label rule (`label_ok`): at most 24 bytes, printable ASCII 0x20-0x7E, zero padding only at the tail. The IOU
+  carries no label, so the books link IOU to order by `nonce = keccak256(request[0:92])`, which the agent computes
+  after `GET_REQUEST`.
+- `GET_AUTHS p1` is a ring position (`NV.auths[n % 8]`), not time order.
+- `WALLET_CLI_MOCK=1` **exists** in wallet-cli 2.9.0: `wallet-cli.exe` holds, as a UTF-16 string,
+  `function JW(e="wallet-cli"){return jdt(process.env.WALLET_CLI_MOCK==="1",{applicationId:...`. `ring init` still
+  calls `getOrCreateTrustchain` behind "Connect device, open Ledger Sync app". Run with no device and an isolated state
+  dir (no keychain entry was written; the member key is stored only after the device step):
+  ```
+  $ WALLET_CLI_MOCK=1 WALLET_PASS=*** WALLET_CLI_NO_NUDGE=1 LOCALAPPDATA=<scratchpad>/wc timeout 90 wallet-cli ring init --name ta-mock-agent --output json
+  {"ok":false,"error":{"command":"ring init","code":"unknown","message":"No Ledger device found. Unlock the device and try again."}}
+  real	1m1.424s
+  exit=1
+  ```
+  So the Key Ring cannot be emulated end to end here; `agent/keyring.md` has the one-time hardware steps.
+- LLM keys: `OPENAI_API_KEY` is rejected (`openai.AuthenticationError: Error code: 401 ... 'code': 'invalid_api_key'`
+  on a free `models.list` call). `OPENROUTER_API_KEY` is valid (`GET /api/v1/key` -> 200). So the provider order is
+  Venice, OpenRouter, OpenAI, and the default OpenRouter model is `openai/gpt-4.1-mini` (listed with `tools` support,
+  $0.40 / $1.60 per M tokens).
+
+### Runs (exact commands, Git Bash, one container at a time, `ta-` prefix)
+```bash
+cd mvp/ledger-cash
+python agent/test_agent.py                                          # exit 0, no network
+python -u agent/agent_demo.py > agent/agent_demo-run.log 2>&1       # exit 0, 66 s
+python -u agent/live_smoke.py                                       # 2 live calls (plus 1 in agent_demo, below)
+```
+The first two demo runs failed and were fixed. (1) `reader never armed`: the payer's "Pay by tap" button was pressed
+while the LOAD_CASH "Done" status was still up, so the demo now waits 3.5 s as `till_demo.py` does, and tap 2 uses USB
+`TAP_TO_PAY`. (2) The offline parser listed items longest-alias first ("muffin, latte"), so it now keeps the order
+they were said in. The excerpts below are from the re-run after the review fixes (next section):
+
+`test_agent.py` (verbatim, minus the host's pydantic logfire warning):
+```
+  parsed by the offline keyword parser: {'flat_white': 2, 'croissant': 1, 'oat_milk': 1}
+  dropped LLM line {'id': 'free_money', 'qty': 1}
+  dropped LLM line {'id': 'muffin', 'qty': 9999}
+  dropped LLM line {'id': 'sandwich', 'qty': 50}        (x9: ten lines of 50 sandwiches -> {'sandwich': 50})
+  slot 0: 5.000000 USDC from 0x46cE8565DD320e3764aa33cbdA7024F469132354 for '(not from agent)': unsettled IOU
+  slot 0: 5.000000 USDC from 0x46cE8565DD320e3764aa33cbdA7024F469132354 for '(not from agent)': bad IOU (signature, payee or amount)
+  slot 0: 5.000000 USDC from 0x46cE8565DD320e3764aa33cbdA7024F469132354 for 'x': bad IOU (signature, payee or amount)
+  Key Ring decrypt failed (exit 1): Ledger Key Ring not initialized
+  Key Ring not used: no relayer.enc (not provisioned, see keyring.md)
+  offline (ConnectionError): IOUs stay unsettled
+  slot 0: 5.000000 USDC from 0x46cE8565DD320e3764aa33cbdA7024F469132354 for '(not from agent)': unsettled IOU
+  relayer key source: test
+  0x00ec9d032acf347d...: IOU not to the payee watch() booked it for: not submitted
+ALL PASS
+```
+(The Key Ring lines come from a stub `wallet-cli` on PATH: they test the agent's handling, not the real CLI.)
+
+`agent_demo-run.log`, decisive lines (verbatim, without the relay's APDU hex):
+```
+== order 1: merchant types 'two flat whites and a croissant, one oat milk'
+  parsed by the offline keyword parser: {'flat_white': 2, 'croissant': 1, 'oat_milk': 1}
+  total 9.400000 USDC (computed in code), label '2 flat white, croissant'
+  [payee] Request 9.4 USDC | For: 2 flat white, croissant | Reject | Approve
+  [payer screen] Pay | 9.4 USDC | To | 0xB1124942BA3CEB48 | D87DAC9BABC50CA3B | 50A72DB | For | 2 flat white, croissant | Reject | 2 of 4
+  slot 0: 9.400000 USDC from 0x46cE8565DD320e3764aa33cbdA7024F469132354 for '2 flat white, croissant': unsettled IOU
+== order 2: merchant types 'a latte and a blueberry muffin'
+  [payee] Request 6.4 USDC | For: latte, muffin | Reject | Approve
+  slot 1: 6.400000 USDC from 0x46cE8565DD320e3764aa33cbdA7024F469132354 for 'latte, muffin': unsettled IOU
+== order 3: 'a sandwich', merchant rejects it on the Ledger
+  not requested: SW 6985 rejected on device
+  rejected on screen: no request served, nothing booked
+== 3. chain (online): risk check, then settle
+  Key Ring not used: no relayer.enc (not provisioned, see keyring.md)
+  relayer key source: RELAYER_KEY env var (NON-LEDGER FALLBACK, emulation/CI only)
+  9.400000 USDC '2 flat white, croissant' from 0x46cE8565DD320e3764aa33cbdA7024F469132354: settled 0x0be10f99d6c1ea18c0bd6c358adc93deb7bbc6b75ede1754f753055d2527d3e7
+  6.400000 USDC 'latte, muffin' from 0x46cE8565DD320e3764aa33cbdA7024F469132354: INSUFFICIENT FUNDS, not submitted
+  0x46cE8565DD320e3764aa33cbdA7024F469132354 0.600000 USDC
+  0xb1124942BA3CeB48d87Dac9baBc50ca3B50A72db 9.400000 USDC
+  IOU 2 was never submitted: authorizationState(payer, nonce 2) is still false
+  re-check of IOU 1: 'already settled (AuthorizationUsed on-chain)', caught before any transaction
+== payer tops up the cash account (+10 USDC); the agent retries the flagged IOU
+  6.400000 USDC 'latte, muffin' from 0x46cE8565DD320e3764aa33cbdA7024F469132354: settled 0xc8e57fea2cecfea2f7723268891494ac7327bbfcfae296257abf9edea203eb8a
+  0x46cE8565DD320e3764aa33cbdA7024F469132354 4.200000 USDC
+  0xb1124942BA3CeB48d87Dac9baBc50ca3B50A72db 15.800000 USDC
+ALL PASS
+```
+Screens: `screens/agent/` (`07-payee-agent-request-approve.png` shows "Request 9.4 USDC / For: 2 flat white,
+croissant"; `35-payee-agent-request-reject.png` is the rejected order). Books: `agent/books-demo.csv`. No `ta-*`
+container was left running.
+
+Live LLM calls: 2 in total, both OpenRouter `openai/gpt-4.1-mini`, temperature 0, one forced `ring_up` tool call each.
+Call 1, with the first system prompt:
+```
+provider openrouter, model openai/gpt-4.1-mini
+order: 'could I grab a couple of flat whites, one with oat, plus a croissant and a double espresso'
+LLM tool call ring_up -> {'flat_white': 2, 'oat_milk': 1, 'croissant': 1, 'espresso': 2}
+offline parser       -> {'flat_white': 1, 'oat_milk': 1, 'croissant': 1, 'espresso': 1}
+total 13.800000 USDC (computed in code from menu.json), label '2 flat white +2'
+PASS
+```
+The model read "a double espresso" as two espressos. The prompt now says a "double" drink is one drink plus
+`extra_shot`. Call 2 (`agent/live_smoke-run.log`):
+```
+provider openrouter, model openai/gpt-4.1-mini
+order: 'could I grab a couple of flat whites, one with oat, plus a croissant and a double espresso'
+LLM tool call ring_up -> {'flat_white': 2, 'oat_milk': 1, 'croissant': 1, 'espresso': 1, 'extra_shot': 1}
+offline parser       -> {'flat_white': 1, 'oat_milk': 1, 'croissant': 1, 'espresso': 1}
+total 12.200000 USDC (computed in code from menu.json), label '2 flat white +2'
+PASS
+```
+The offline parser misses "a couple of" (it reads 1). It is meant for scripted stage orders; free-form speech needs the
+LLM. Either way the merchant sees the total on the Ledger before approving.
+
+### Review fixes (2026-10-11, second pass)
+A review found one high and four medium issues; all are fixed, and the runs above are from after the fixes.
+- **Quantity cap on the sum (high).** `parse_llm` capped each line at 50 but not the sum, so ten `{sandwich, 50}`
+  lines became 500 sandwiches (3250 USDC). It now drops a line that would take an item past 50, as the offline
+  parser already did. Test: the 10 x 50 case gives `{'sandwich': 50}`.
+- **Offline parser.** `1.5 lattes` read as 5 lattes; a `(?<![\d.])` guard makes it 1. `a double espresso` now adds an
+  `extra_shot`. Negation is **not** handled (`two flat whites, no croissant` charges a croissant); a test pins that
+  limit and agent/README lists it.
+- **LLM timeout.** The OpenAI client had the SDK defaults (600 s, 2 retries). Now `timeout=TILL_LLM_TIMEOUT` (8 s)
+  and `max_retries=0`, so bad Wi-Fi reaches the offline parser in seconds. Not measured against a dead network.
+- **`authorizationState` is not proof of payment.** Real USDC (FiatTokenV2_2) sets it on `cancelAuthorization` too.
+  `risk()` now looks for `AuthorizationUsed(payer, nonce)` with `eth_getLogs`: found -> `already settled
+  (AuthorizationUsed on-chain)`, not found -> `CANCELLED by payer: unpaid`, `eth_getLogs` error (public RPCs cap the
+  block range) -> `nonce used or cancelled (not proof of payment)`. The local USDC look-alike has no
+  `cancelAuthorization`, so only the "found" branch ran on anvil; the other two are unit-tested with stubbed RPC
+  reads. `settle.mjs` still prints `REJECTED already used` for both cases (unchanged; the agent does not rely on it).
+- **Lows.** `request()` checks that `GET_REQUEST` echoes the amount and label it sent; `watch()` stores the payee
+  address in a new `payee` books column, and `settle()` skips a row whose IOU is not to that payee; the console line
+  prints the exact amount (`Request 9.4 USDC`), not 6 significant digits; `test_agent.py` pins its IOU as a hex
+  fixture instead of reading `auths.json`; the BOUNDARY text says "on each run, without human input" (there is no
+  polling loop) and that the LLM's only job is order -> menu ids.
+- **Wording.** README, agent/README and PITCH: "typed order (voice optional, not yet run)"; the solvency check is a
+  pre-check, not a guarantee; the Key Ring hedge sits in the same sentence as the claim.
+
+**LLM path end to end (1 live call).** `AGENT_DEMO_LLM=1 python -u agent/agent_demo.py > agent/agent_demo-llm-run.log`
+sends order 1 through OpenRouter `openai/gpt-4.1-mini` (orders 2 and 3 stay offline): exit 0, ALL PASS.
+```
+== order 1: merchant types 'two flat whites and a croissant, one oat milk'
+  parsed by openrouter openai/gpt-4.1-mini (tool call ring_up): {'flat_white': 2, 'croissant': 1, 'oat_milk': 1}
+  total 9.400000 USDC (computed in code), label '2 flat white, croissant'
+  [payee] Request 9.4 USDC | For: 2 flat white, croissant | Reject | Approve
+  slot 0: 9.400000 USDC from 0x46cE8565DD320e3764aa33cbdA7024F469132354 for '2 flat white, croissant': unsettled IOU
+  9.400000 USDC '2 flat white, croissant' from 0x46cE8565DD320e3764aa33cbdA7024F469132354: settled 0x3ed35f3f20760c8de2e5c07824998309134d100626898a5711637080b56237b9
+```
+Live LLM calls in total: 3 (two `live_smoke.py`, this one). The clean offline run (`agent_demo-run.log`, keys unset)
+came after it and rewrote `screens/agent/` and `books-demo.csv`. `demo.py` was re-run once afterwards: exit 0,
+ALL PASS, screens byte-identical; its new `auths.json` was reverted so the committed one, `demo-run.log` and the
+video stay in step. Any future agent_demo re-run changes nonces and tx hashes, so refresh this excerpt with it.
+
+**Video re-rendered** (`cd video && python render.py`, system Python + Pillow 12.3.0, `jrottenberg/ffmpeg:6.1-alpine`
+as `ta-ffmpeg-render`): ffprobe `h264 1920x1080 yuv420p`, 112.5 s (was about 84 s). Steps 1-8 are unchanged in timing
+(the stage fallback "0:13 to 1:13" still starts at the payee's request) and use the current `screens/`. Three scenes
+were added at the end: step 9, the on-device till from `screens/till/` (a separate 4.5 USDC run, captioned as such);
+step 10, the till agent's typed order -> parsed -> priced -> "Request 9.4 USDC" on the merchant's Ledger (lines from
+`agent/agent_demo-run.log`, which says offline parser); step 11, pre-check, settle, `INSUFFICIENT FUNDS`, settle
+after top-up, with the `NON-LEDGER FALLBACK` key line shown in red. The end card gained one line: offline parser and
+env-var relayer key. Frames 157, 180, 200 and 215 were checked by eye.
+
+### Not exercised / open
+- Key Ring: `ring init` / `encrypt` / `decrypt` against a real ring (needs the Nano S Plus + Ledger Sync app;
+  `agent/keyring.md`). `agent_demo.py` uses `relayer.enc` automatically once it exists, giving the relayer anvil gas.
+- Real device: `till_agent.py order|books` over USB (needs `pip install ledgerblue`), and `settle --net base` on Base
+  Sepolia.
+- Voice (`--mic`, `--audio`): not run (packages not installed).
+- Venice: not called (no `VENICE_API_KEY` here); the default model id `kimi-k2-5` comes from Venice's docs and is unverified.

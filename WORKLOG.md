@@ -171,3 +171,12 @@ Sahas: "i don't just mean nfc research, i mean ledger research in general". Eigh
 - **PITCH.md**: one-liner, 30 s version, 5-min two-presenter talk track, slide outline, demo plan + fallback, 15 jury Q&A, prior art, submission form + social post drafts.
 - Verified independently: `demo.py` and `attest_demo.py` ALL PASS. New hashes flex `69873224…2acdb`, nanos2 `63e3c196…7bb9`.
 - Stale: `video/ledger-cash-demo.mp4` still shows the older payee screens.
+
+## 2026-10-11 ~08:00 — AI till agent (the brief's required AI component)
+
+- `mvp/ledger-cash/agent/` — the merchant's AI cashier. `till_agent.py order "two flat whites and a croissant, one oat milk"` → LLM maps words to menu ids only → code prices it exactly (Decimal, micro-USDC) → SET_REQUEST to the merchant's Ledger → merchant approves "Request 9.4 USDC / For: 2 flat white, croissant" on the device. `books` pulls IOUs (GET_AUTHS), verifies signatures, writes a CSV. `settle` pre-checks each payer's on-chain balance and the nonce (AuthorizationUsed logs vs cancelled), refuses insufficient-funds IOUs, then submits with a gas relayer key.
+- Relayer key source: Ledger Key Ring (`wallet-cli ring decrypt --key relayer`) first, labelled env-var fallback second. Key Ring cannot be emulated (`WALLET_CLI_MOCK=1` still waits for USB in `ring init`), so provisioning is a hardware step for Sahas's Nano S Plus: `agent/keyring.md`.
+- **Boundary (printed at startup):** agent, on each run without human input: understands the order, prices it in code, drafts the request, reads IOUs, verifies signatures, pre-checks solvency, settles, keeps the books. Human, on hardware: merchant approves every request on their Ledger; payer approves every payment on their Secure Screen. The agent holds no payment-signing key.
+- Tests: `agent/test_agent.py` (offline) and `agent/agent_demo.py` (emulated end to end, offline parser) ALL PASS, re-verified independently with LLM keys unset. One run with `AGENT_DEMO_LLM=1` used a live OpenRouter `openai/gpt-4.1-mini` call (3 live calls total). Review: 1 high (summed-quantity cap), 4 medium (decimal parsing, LLM timeout, cancelled-vs-settled nonce, voice overclaim), all fixed. Voice (`--mic`) not run: faster-whisper/sounddevice not installed.
+- Note for Sahas: the `OPENAI_API_KEY` in this PC's user environment returns 401 invalid_api_key; OpenRouter works.
+- Video refreshed with the till and agent scenes.

@@ -35,7 +35,7 @@ IOU that anyone settles on-chain later.
 
 ## 2. Five-minute talk track (two presenters)
 
-Target 270 s of talk, leaving 30 s of slack inside the 5 minutes. Slide numbers refer to section 3.
+Target 280 s of talk, leaving 20 s of slack inside the 5 minutes. Slide numbers refer to section 3.
 
 | # | Time | Who | Slide | What is said (close to verbatim) |
 |---|---|---|---|---|
@@ -43,12 +43,12 @@ Target 270 s of talk, leaving 30 s of slack inside the 5 minutes. Slide numbers 
 | 2 | 0:20-0:45 (25 s) | A | 2, 3 | "Three steps. At home you fund a cash account and load a spending cap into the device: the Ledger confirms it on screen. At the till, the shop's device holds a signed request: 5 USDC, coffee. You tap, the request appears on your Secure Screen, you hold to sign. What the shop holds is a signed USDC authorization, an IOU. Later anyone online submits it and the USDC moves." |
 | 3 | 0:45-1:55 (70 s) | B does the tap, A narrates | 4 | **Live path (Gate 2 passed):** B arms the phone ("1 USDC, coffee"); A runs `hw.py tap` so the terminal shows each state; B holds the USB-tethered Flex to the phone. A, on the camera feed: "The Flex is now an NFC reader. It reads the shop's request and checks the shop's signature inside the chip. Pay 1 USDC, To this address, which matches the phone, For coffee, Cash left after 9. B holds to sign. The chip debits the cap before the signature leaves the device, then hands it over. The phone checks it and sends back a signed receipt: Paid." Then A settles `tap-auth.json`, which `hw.py` wrote on PAID: "Back online: one call, and 1 USDC moves. The phone can export the same authorization; anyone can submit it." **Fallback (no Gate 2):** play the video from 0:13 to 1:13 with sound off, A narrates the same lines and says first: "This is Ledger's own emulator, two Flex devices, with the NFC field emulated by our patch." |
 | 4 | 1:55-2:25 (30 s) | A | 5 | "What it refuses matters more. Tap the same shop again: Payee has no request, nothing signed. Pull the phone away before you approve: Card removed, nothing paid. Pull it away after signing: the cap was already debited, so you can't sign the same money twice, and the signed authorization can still be read off the payer over USB until its next tap. Settle the same authorization twice: USDC itself rejects it. And a stranger's reader in range can't read your balance or push a payment onto your screen." |
-| 5 | 2:25-3:00 (35 s) | B | 6 | "Who decides what. The chip, on its own: checks the shop's signature, the network, your cap and replays, and debits before release. No host can override that. The human, on the Secure Screen: approves loading the cap, and reads Pay, To, For, Cash left after, then holds to sign. Settlement is the only step software does alone, and it holds no key: it can only submit what you signed. Shops propose, humans approve, the chip enforces the cap. There is no AI agent in this build. If we add one, it goes on the shop's side: a clerk that settles and reconciles IOUs and never signs." |
-| 6 | 3:00-3:35 (35 s) | B | 8 | "Why this is new for Ledger. The Flex SDK has had an NFC reader API since December 2024. Ledger's own engineer wrote that no production app uses it, and we found no third-party app that does. Third-party card emulation exists; reader mode we did not find. Speculos couldn't emulate it, so we patched it: two emulated Flex devices tap each other with real multi-chunk APDUs. Our DX write-up has 15 findings on this path and one ask: a reader example app." |
-| 7 | 3:35-4:15 (40 s) | A | 7 | "Honest limits. This is rung one of three. The cap protects the payer from overspending; it gives the shop no guarantee. The shop can't check offline that the USDC is still there, and the owner could sign with the same key outside our app. Rung two, attestation, is built in emulation, and we found that BOLOS lets any app on the device forge it; it needs an OS-level fix before it can protect a shop. Rung three is escrow, so the note pays out without trusting the payer. To ship this, Ledger would need attestation for third-party apps and a documented NFC permission for apps." |
-| 8 | 4:15-4:30 (15 s) | B | 9 | "Hardware so far: **[fill in after Gates 1-3, one sentence]**. Everything else, the code, the emulator patch, the checklists and the video, is in the repo. Thank you." |
+| 5 | 2:25-3:10 (45 s) | B | 6 | "Who decides what. The chip, on its own: checks the shop's signature, network, cap and replays, and debits before release. No host can override that. The human, on the Secure Screen: approves the cap, reads Pay, To, For, Cash left after, holds to sign. The AI sits on the shop's side: a till agent. The cashier types 'two flat whites and a croissant'; an LLM maps it to the menu (on stage a deterministic parser does this, so Wi-Fi can't break it; the LLM run is recorded in NOTES), the agent prices it in code, and the merchant approves the request on their own Ledger. After the tap it verifies the IOU, checks just before settling that the payer's balance covers it right now (a pre-check, not a guarantee), flags the ones that can't, and settles the rest. Its only key pays gas; it can't sign a payment. Agents propose, humans approve on hardware, the chip enforces the cap." |
+| 6 | 3:10-3:45 (35 s) | B | 8 | "Why this is new for Ledger. The Flex SDK has had an NFC reader API since December 2024. Ledger's own engineer wrote that no production app uses it, and we found no third-party app that does. Third-party card emulation exists; reader mode we did not find. Speculos couldn't emulate it, so we patched it: two emulated Flex devices tap each other with real multi-chunk APDUs. Our DX write-up has 15 findings on this path and one ask: a reader example app." |
+| 7 | 3:45-4:25 (40 s) | A | 7 | "Honest limits. This is rung one of three. The cap protects the payer from overspending; it gives the shop no guarantee. The shop can't check offline that the USDC is still there, and the owner could sign with the same key outside our app. Rung two, attestation, is built in emulation, and we found that BOLOS lets any app on the device forge it; it needs an OS-level fix before it can protect a shop. Rung three is escrow, so the note pays out without trusting the payer. To ship this, Ledger would need attestation for third-party apps and a documented NFC permission for apps." |
+| 8 | 4:25-4:40 (15 s) | B | 9 | "Hardware so far: **[fill in after Gates 1-3, one sentence]**. Everything else, the code, the emulator patch, the checklists and the video, is in the repo. Thank you." |
 
-Sum: 20 + 25 + 70 + 30 + 35 + 35 + 40 + 15 = 270 s.
+Sum: 20 + 25 + 70 + 30 + 45 + 35 + 40 + 15 = 280 s.
 
 Beat 8 variants, pick one on Monday night:
 - Gate 2 passed: "A real Flex paid a real Android phone over NFC this week, and that authorization settled on-chain."
@@ -106,7 +106,7 @@ Four boxes left to right, each with its image:
   - `The chip, on its own`: `Checks the shop's signature, network, cap and replays` / `Debits before the signature leaves` / `Refuses host commands over NFC`
   - `The human, on the Secure Screen`: `Approves the network and the cap` / `Reads Pay, To, For, Cash left after` / `Matches To with the shop's screen, holds to sign`
   - `Anyone online, holding no key`: `Submits the signed authorization` / `Can't change amount, payee or nonce` / `Can't settle it twice`
-- Bottom, smaller: `AI: none in this build. Proposal: a shop-side settlement clerk that settles and reconciles IOUs and never signs.`
+- Bottom, smaller: `AI on the shop's side, built: the till agent turns an order into a request the merchant approves on their Ledger, verifies and risk-checks IOUs, settles. It never signs a payment.`
 
 **Slide 7: the cash ladder**
 - Title: `Three rungs. This build is the first.`
@@ -145,6 +145,13 @@ Four boxes left to right, each with its image:
 | Gate 1 GO, Gate 2 not solid | Video for the tap; real Flex on USB (`hw.py selfpay`) only if it has been run and rehearsed |
 | Gate 1 NO-GO | Video only, plus the gate result stated as a finding |
 | Paris-only bridge (section C: Flex pays the Nano through the phone) | Use live only if it worked in a rehearsal in Paris before the finals. It has never run on hardware |
+
+### Till agent on stage
+The live tap's payee is the Android phone, and the till agent cannot drive it: the agent talks to a Ledger payee over
+USB. Show the agent with `agent/agent_demo-run.log` and `screens/agent/` (order -> "Request 9.4 USDC / For: 2 flat
+white, croissant" -> tap -> IOU verified -> second IOU flagged insufficient -> settled after top-up). Use the offline
+parser, so venue Wi-Fi is not a dependency. Run it live with the Nano S Plus as payee over USB
+(`till_agent.py order --offline ...`) only if `ledgerblue` is installed and it has been rehearsed.
 
 ### Live path (Flex + Android on stage)
 Set up before the slot, on the laptop that will be on stage:
@@ -261,12 +268,23 @@ the sideload warning, endorsement provisioning on retail devices (source audit M
 may use the reader at all (Gate 1).
 
 **11. The brief asks for AI. Where is it? [Mo, Rogers]**
-There's no AI agent in this build, and we won't pretend there is. We spent the week on the signer: a Ledger Signer use
-case where the human approves every payment on the Secure Screen. Our proposal, not built: a shop-side settlement
-clerk. It pulls the authorizations, checks each one and the payer's on-chain balance, settles through a relayer,
-reconciles receipts, flags IOUs at risk, and answers "who still owes me". It holds no signing key, and it can't change
-an authorization, because the payer's signature covers every field. The cap mechanism also generalises: a spending cap
-enforced inside the chip is a building block for the per-period caps in your Agent Policies roadmap, enforced in a device app.
+On the shop's side, in `mvp/ledger-cash/agent/`: the till agent. The cashier types an order (voice is optional and has not
+been run). An LLM maps it to the menu with one forced tool call (OpenAI-compatible: Venice, OpenRouter or OpenAI).
+The agent computes the total in code and sends the request to the merchant's Ledger, where the merchant approves
+"Request 9.4 USDC, For: 2 flat white, croissant". After taps it pulls the signed IOUs, verifies each signature, and
+when online checks, just before settling, the payer's USDC balance and whether the nonce is already used or
+cancelled (a pre-check, not a guarantee). It flags those IOUs before submitting and settles the rest. Named boundary:
+on each run, without human input, the agent maps the order to menu ids, prices, drafts, pulls IOUs, verifies, checks
+and settles; the LLM's only job is the menu ids, and everything after that is deterministic code. The merchant
+approves every request on their Ledger and the payer approves every payment on their Secure Screen. It holds no key
+that signs a payment. Its one key is a gas relayer, which can only submit authorizations the payer already signed.
+What is honest to say: it runs end to end in emulation (`agent/agent_demo.py`, ALL PASS), once with the LLM parsing
+the order (`agent/agent_demo-llm-run.log`, one live call). On stage it uses a deterministic keyword parser, so the
+demo does not depend on venue Wi-Fi; the LLM handles free-form orders. The relayer key goes in the Ledger Key Ring (`wallet-cli ring decrypt`), but provisioning needs the
+Nano S Plus with Ledger Sync. Until then it uses an env-var fallback, labelled as such. The LLM can misread an order:
+in one run it read "a double espresso" as two espressos. That is why the amount is computed in code and shown on the
+merchant's Ledger before anything is requested. The cap mechanism also generalises: a spending cap enforced inside the
+chip is a building block for the per-period caps in your Agent Policies roadmap, enforced in a device app.
 
 **12. Why a custom app instead of the stock Ethereum app? [Mo]**
 Three reasons. The stock app can't use NFC reader mode. It has no cap, so nothing would stop it signing past the
@@ -344,8 +362,12 @@ first reader call.
 - [ ] **Hardware lines.** Replace every **[fill in after Gate N]** in this file and in the README status line.
 - [ ] **Club name and team members** (not found in the repo).
 - [ ] **No AI attribution** anywhere that gets pushed or posted: commits, README, form, posts.
-- [ ] **Eligibility.** Ask a mentor on Monday whether a custom device app with no DMK, wallet-cli or Key Ring call
-      counts as "an AI-powered use case built around a Ledger Signer", and whether the missing AI part costs points.
+- [ ] **Key Ring for the till agent.** Provision the relayer key on the Nano S Plus (`agent/keyring.md`, needs the
+      Ledger Sync app), then re-run `python -u agent/agent_demo.py` and check it prints
+      `relayer key source: Ledger Key Ring`. If it is not done, say "env-var fallback" on stage, not Key Ring.
+- [ ] **Eligibility.** Ask a mentor on Monday whether the device app plus the till agent (LLM order parsing, IOU
+      verification, risk check, settlement with a Key Ring relayer key) counts as "an AI-powered use case built around
+      a Ledger Signer".
 - [ ] **Re-check quoted output.** `app/Makefile` and `app/src/cash.c` are being changed by another track. After it
       lands, re-verify every screen string, `demo-run.log` excerpt, screenshot filename and video timestamp quoted in
       sections 2, 3 and 4 against the final `demo-run.log`, `screens/` and video.
@@ -376,15 +398,18 @@ cap, you approve on the Secure Screen, and the shop gets a signed IOU anyone set
 > is the first third-party app to use the Flex NFC reader API, which has been in Ledger's SDK since December 2024.
 >
 > Human and automatic, named: the chip on its own checks the request, enforces the cap and debits before release; the
-> human approves the cap and every payment on the Secure Screen; settlement is the only step software does alone, and
-> it holds no key. There is no AI agent in this build; a shop-side settlement assistant that never signs is our
-> proposed next step.
+> human approves the cap and every payment on the Secure Screen; settlement is the only money-moving step software does alone, and
+> it holds no key that can sign a payment. The AI part is a till agent on the shop's side: an LLM turns a typed order into menu items, and code
+> prices it into a request the merchant approves on their Ledger. Code then verifies each signed IOU, checks just before
+> settling that the payer's balance covers it right now (a pre-check, not a guarantee), flags the ones that can't, and
+> settles the rest with a gas relayer key designed to live in the Ledger Key Ring (not yet provisioned; the recorded run
+> uses a labelled env-var fallback). It never signs a payment. It runs end to end in emulation.
 
 **Pre-existing code disclosure:**
 > Nothing of ours existed before the kickoff (7 October, 15:00 CEST); the repository's first commit is 10 October.
 > We build on open-source code we did not write: the LedgerHQ app-boilerplate (Apache-2.0) as the device app skeleton,
 > ledger-secure-sdk, Speculos (we ship a patched copy of its `seproxyhal.py` and the diff), ledgerblue, viem,
-> eth-account, Foundry (anvil) and the standard Android/Kotlin toolchain. The USDC test token is our own minimal
+> eth-account, the openai Python SDK (for the till agent), Foundry (anvil) and the standard Android/Kotlin toolchain. The USDC test token is our own minimal
 > contract written to match Circle's FiatTokenV2_2 `transferWithAuthorization` behaviour.
 
 **GitHub:** `https://github.com/Sahas266/ledger-op3n-n3xt-hackathon-26/tree/ledger-cash` (or `main` after the merge;

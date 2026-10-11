@@ -17,9 +17,13 @@ it.
 Status (2026-10-10): **runs end to end in emulation.** `python demo.py` prints `ALL PASS` (recorded output below).
 It uses two Speculos Flex instances joined by an emulated NFC field and settles on anvil. Nothing has been run on a real
 device yet; see [What changes on real hardware](#what-changes-on-real-hardware) and the [hardware gates](#hardware-gates).
-The real-device checklists are in [HARDWARE.md](HARDWARE.md), and a 1-minute video of the emulated run is
-[video/ledger-cash-demo.mp4](video/ledger-cash-demo.mp4). Rung v1 of the cash ladder, **attested IOUs**, also runs in
+The real-device checklists are in [HARDWARE.md](HARDWARE.md), and a 2-minute video of the emulated run is
+[video/ledger-cash-demo.mp4](video/ledger-cash-demo.mp4) (the last three scenes: on-device till, till agent). Rung v1 of the cash ladder, **attested IOUs**, also runs in
 emulation only: `python attest_demo.py` prints `ALL PASS` (see [Attested IOUs](#attested-ious-v1-emulated)).
+The merchant side has an AI component: the [till agent](#ai-till-agent) turns a typed order (voice optional, not yet
+run) into a request the merchant approves on their Ledger; deterministic code then verifies, pre-checks and settles
+the signed IOUs it receives. It also runs end to end in emulation only: `python -u agent/agent_demo.py` prints
+`ALL PASS`.
 
 ```
  payer Flex (NFC reader)                         payee Ledger (NFC card emulation)
@@ -42,6 +46,35 @@ emulation only: `python attest_demo.py` prints `ALL PASS` (see [Attested IOUs](#
                                                  ... later, online: GET_AUTHS -> settle.mjs
                                                  -> USDC.transferWithAuthorization on-chain
 ```
+
+## AI till agent
+
+[`agent/`](agent/README.md) is the AI cashier on the payee's side. The merchant types an order ("two flat whites and a
+croissant, one oat milk"; voice is optional and has not been run). An LLM maps it to `agent/menu.json` with one forced
+tool call. Without a key, or when the call fails, a deterministic keyword parser does it, which keeps the stage demo
+off the network. The agent prices the order in code and sends `SET_REQUEST` with the amount and a label of at most 24
+characters. The merchant approves "Request 9.4 USDC / For: 2 flat white, croissant" on their Ledger. After taps the
+agent pulls `GET_AUTHS`, verifies each signed IOU off-device, and books it in a CSV. When an RPC is reachable it reads
+the payer cash account's USDC balance and `authorizationState(nonce)` just before settling (a pre-check, not a
+guarantee: the payer can still move the USDC before the transaction lands). It flags `insufficient funds` or a
+used/cancelled nonce before submitting anything, then settles the rest through `settle.mjs` with a relayer key
+designed to come from the Ledger Key Ring (`wallet-cli ring decrypt --key relayer`) but not yet provisioned there (a
+hardware step, see [agent/keyring.md](agent/keyring.md)), so every recorded run used the env-var fallback, labelled as
+non-Ledger.
+
+**Boundary.** *Agent, on each run, without human input:* map the order to menu ids, price it, draft the request, pull
+IOUs (`GET_AUTHS`), verify signatures, pre-check solvency when online, settle, keep the books. The LLM's only job is
+order -> menu ids; everything after that is deterministic code, and nothing runs on a loop: each step is a command.
+*Human, on hardware:* the merchant approves every request on their Ledger; the payer approves every payment on their
+Secure Screen. The agent holds no signing key for payments; its relayer key can only pay gas for authorizations the
+payer already signed.
+
+`agent/agent_demo.py` shows why the online check matters for device-capped cash. The payer's cash account holds
+10 USDC on-chain, but the payer loads 20 USDC of device-capped cash. That is the [no offline
+solvency](#honest-limits) case. Both taps succeed offline (9.4 and 6.4 USDC). Online, the agent settles the first
+IOU, flags the second `insufficient funds` and does not submit it, then settles it after the payer tops up. Recorded
+output: `agent/agent_demo-run.log`. The same run with order 1 parsed by the LLM (one live call, OpenRouter
+`gpt-4.1-mini`) is `agent/agent_demo-llm-run.log`; NOTES.md has both.
 
 ## The cash account
 
@@ -349,6 +382,9 @@ python demo.py
 python till_demo.py
 # 5. optional: attested IOUs (v1, emulated; same ports, no anvil; builds the cheating payer once; needs cryptography)
 python attest_demo.py
+# 6. optional: the AI till agent (same ports + anvil, offline parser, no LLM call), then its offline checks
+python -u agent/agent_demo.py
+python agent/test_agent.py
 ```
 
 `demo.py` runs in three phases, one container each:
@@ -545,6 +581,7 @@ These are not verified, and each one can break the real-device path. The order f
 | `app/src/cash.c` | The whole device app (payer and payee, USB and NFC). `app/test.py` is the stage-B USB test. |
 | `speculos-nfc/` | Patched `seproxyhal.py` (NFC reader emulation, plus a USB host link on a `--transport NFC` instance), `relay.py` (the field; `tap(stop=, cut_ins=)`, `card_exchange()`), stage-A checks. |
 | `interop/android_payee_tap.py` | Gate 2 in emulation: a Speculos Flex payer taps the Android payee logic (`mvp/android/core`, `InteropMain`), byte for byte, and settles on anvil. Records the transcript CI replays. See NOTES.md, "Interop". |
+| `agent/` | The AI till agent (order -> request, IOU verification, risk check, settlement, books); `agent/README.md`, `agent/keyring.md`. |
 | `settle/` | USDC look-alike (`src/USDC.sol`), `deploy.mjs`, `fund.mjs`, `settle.mjs`, `balances.mjs`, stage-C test. |
 | `auths.json` | What the payee handed over in the last demo run (input to `settle.mjs`). |
 | `screens/` | Screenshots of both devices from the last demo run. |
