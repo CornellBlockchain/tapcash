@@ -14,8 +14,8 @@ def draw_logo(marks=True):
     im = Image.new("L", (512 * S, 512 * S), 255)
     d = ImageDraw.Draw(im)
     u = lambda *v: [x * S for x in v]
-    d.rounded_rectangle(u(176, 136, 336, 376), radius=32 * S, outline=0, width=STROKE * S)
-    d.rounded_rectangle(u(206, 290, 306, 346), radius=12 * S, outline=0, width=(STROKE - 10) * S)
+    d.rounded_rectangle(u(176, 136, 336, 376), radius=32 * S, fill=0)  # solid black body
+    d.rounded_rectangle(u(206, 290, 306, 346), radius=12 * S, outline=255, width=(STROKE - 10) * S)  # white panel
     # vibration marks on the top-right and bottom-left corners (PIL angles: clockwise from 3 o'clock)
     for (cx, cy), (a0, a1) in ([((308, 164), (275, 355)), ((204, 348), (95, 175))] if marks else []):
         for r, trim in [(74, 4), (124, 12)]:
@@ -36,7 +36,7 @@ def save(src, size, path, levels):
     small.convert("P").save(path)
 
 
-logo = draw_logo()
-save(logo, 40, "icons/tapcash_40px.gif", 16)  # Flex dashboard icon
-save(logo, 32, "icons/tapcash_32px.gif", 2)   # Stax dashboard icon
-save(draw_logo(marks=False), 64, "glyphs/tapcash_64px.gif", 2)  # in-app home + review: device only, fills the frame
+device = draw_logo(marks=False)
+save(device, 40, "icons/tapcash_40px.gif", 16)  # Flex dashboard icon: device only
+save(device, 32, "icons/tapcash_32px.gif", 2)   # Stax dashboard icon: device only
+save(draw_logo(), 64, "glyphs/tapcash_64px.gif", 2)  # in-app home + review: with vibration marks
