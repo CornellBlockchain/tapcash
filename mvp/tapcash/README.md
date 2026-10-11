@@ -48,17 +48,27 @@ Before the first payment:
 ## Pocket mode (one tap)
 
 Pocket mode is optional, and off by default. With it off, every payment takes the usual two taps with a review on the Flex.
-- On the Flex home screen, touch "Turn on pocket mode" and confirm once.
+- Turn it on with the "Pocket mode" switch on the first Settings page (the gear on the home screen).
 - After that, payments up to the per-payment limit are signed on the first tap, with no review. The second tap isn't needed, and the page needs no change.
 - Pocket mode stops when the total budget or the number of payments is used up, or when the app closes, since it lives only in the app's memory.
-- Settings (the gear on the home screen) sets all three limits:
+- The next three Settings pages set its limits:
   - per payment: 1, 5, 10 or 50 USDC (default 5);
   - total: 10, 20, 100 or 500 USDC (default 20);
   - number of payments: 1, 5, 10 or 25 (default 10).
 - Bigger payments, or payments past a limit, fall back to the two-tap review.
-- The home screen shows what's left, and "Turn off pocket mode" ends it at once.
+- The home screen shows what's left, and the same switch ends it at once.
 - The risk is like a contactless card's no-PIN limit: someone who taps your open, unlocked Flex can take at most what's left of the budget.
-- `node test-pocket.mjs` checks it on Speculos, starting from a fresh home screen.
+
+## Card mode (one tap, any amount, once)
+
+Card mode is for paying like a card: you turn it on right before paying, and the payment terminal (the iPhone) sets the amount.
+- On the Flex home screen, touch "Turn on card mode" and confirm.
+- The next payment, of any amount, is signed on the first tap with no review. Then card mode turns off by itself.
+- It also turns off with "Turn off card mode" or when the app closes. It doesn't spend the pocket mode budget.
+- The Flex shows what it paid, and to whom, right after.
+- The risk: while it's on, whoever taps the Flex sets the amount, and on-chain payments can't be charged back. Turn it on only at the moment you pay.
+
+`node test-modes.mjs` checks card mode and pocket mode on Speculos, starting from a fresh home screen.
 
 ## Cash out to a card (sandbox)
 
