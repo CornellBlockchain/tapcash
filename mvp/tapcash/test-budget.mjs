@@ -1,6 +1,6 @@
-// Pocket mode on Speculos: small payments sign on the first tap, larger or over-budget ones
+// Budget mode on Speculos: small payments sign on the first tap, larger or over-budget ones
 // fall back to the two-tap review; limits change in Settings. Start Speculos as in test.mjs (fresh, on the home screen), then
-//   node test-pocket.mjs
+//   node test-budget.mjs
 import assert from 'node:assert/strict';
 import { recoverTypedDataAddress, serializeSignature, toHex } from 'viem';
 import { DOMAIN, TYPES, buildRequest, parseRequest, parseResponse } from './web/tapcash.js';
@@ -41,10 +41,10 @@ await sleep(1000);
 await press('Reject');
 await sleep(1500);
 
-await press('Turn on pocket mode');
-assert.match(await screen(), /Turn on pocket mode\?/);
+await press('Turn on budget mode');
+assert.match(await screen(), /Turn on budget mode\?/);
 await press('Turn on');
-await sleep(2500);  // "Pocket mode on" status, then home
+await sleep(2500);  // "Budget mode on" status, then home
 assert.match(await screen(), /20 USDC left/);
 
 // Over the per-tap cap: review, as before
@@ -83,9 +83,9 @@ await press('100 USDC in total');
 await touch(50, 48);    // back home
 assert.match((await events()).map(e => e.text).slice(-5).join(), /100 USDC left/);
 
-await press('Turn off pocket mode');
+await press('Turn off budget mode');
 await sleep(2500);
-assert.match(await screen(), /Turn on pocket mode/);
+assert.match(await screen(), /Turn on budget mode/);
 
 // Limits are picked in Settings (gear, then one page each): 1 USDC per tap, 1 payment
 await touch(403, 75);
@@ -94,7 +94,7 @@ await touch(430, 552);  // next page: total
 await touch(430, 552);  // next page: number of payments
 await press('1 payment');
 await touch(50, 48);    // back home
-await press('Turn on pocket mode');
+await press('Turn on budget mode');
 assert.match(await screen(), /Up to 1 payment of at most 1 USDC each go out on the first tap, without review. 100 USDC in total/);
 await press('Turn on');
 await sleep(2500);
@@ -106,9 +106,9 @@ await sleep(1500);
 const one = req(1);
 const oneResp = await sign(one);
 await assertSigned(one, oneResp);
-assert.equal(await sign(one), oneResp);  // retry after the last payment turned pocket mode off
+assert.equal(await sign(one), oneResp);  // retry after the last payment turned budget mode off
 await sleep(1000);
 assert.match(await screen(), /Paid 1 USDC/);
 await sleep(3000);
-assert.match((await events()).at(-1).text, /Turn on pocket mode/);  // the only payment used: off
-console.log('ok pocket', flex);
+assert.match((await events()).at(-1).text, /Turn on budget mode/);  // the only payment used: off
+console.log('ok budget', flex);

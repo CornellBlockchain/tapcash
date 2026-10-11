@@ -45,20 +45,25 @@ Before the first payment:
 - Fund the Flex address with Base Sepolia USDC from faucet.circle.com.
 - Send about 0.001 Base Sepolia ETH to the iPhone wallet shown on the page.
 
-## Pocket mode (one tap)
+## Payment modes
 
-Pocket mode is optional, and off by default. With it off, every payment takes the usual two taps with a review on the Flex.
-- On the Flex home screen, touch "Turn on pocket mode" and confirm once.
+- **Manual mode (two taps)** is the default. Every payment is reviewed on the Flex: tap, approve, tap again.
+- **Budget mode (spending limits)** signs payments within your limits on one tap.
+
+## Budget mode (spending limits)
+
+Budget mode is optional, and off by default. With it off, the Flex is in manual mode.
+- On the Flex home screen, touch "Turn on budget mode" and confirm once.
 - After that, payments up to the per-payment limit are signed on the first tap, with no review. The second tap isn't needed, and the page needs no change.
-- Pocket mode stops when the total budget or the number of payments is used up, or when the app closes, since it lives only in the app's memory.
+- Budget mode stops when the total budget or the number of payments is used up, or when the app closes, since it lives only in the app's memory.
 - Settings (the gear on the home screen) sets all three limits:
   - per payment: 1, 5, 10 or 50 USDC (default 5);
   - total: 10, 20, 100 or 500 USDC (default 20);
   - number of payments: 1, 5, 10 or 25 (default 10).
-- Bigger payments, or payments past a limit, fall back to the two-tap review.
-- The home screen shows what's left, and "Turn off pocket mode" ends it at once.
+- Bigger payments, or payments past a limit, fall back to manual mode: a review and two taps.
+- The home screen shows what's left, and "Turn off budget mode" ends it at once.
 - The risk is like a contactless card's no-PIN limit: someone who taps your open, unlocked Flex can take at most what's left of the budget.
-- `node test-pocket.mjs` checks it on Speculos, starting from a fresh home screen.
+- `node test-budget.mjs` checks it on Speculos, starting from a fresh home screen.
 
 ## Cash out to a card (sandbox)
 
@@ -79,4 +84,4 @@ After a payment, "Cash out to card" sends the iPhone wallet's USDC to a cash-out
 - **Not private yet.** Every payment comes from the Flex's fixed address and is linkable on-chain.
 - **A signed cheque, not cash.** If the payer spends the balance before the receiver submits, the transfer fails.
 - **Two taps.** iOS ends the NFC session on the first tap's "not yet" reply.
-- **Pocket-cash only.** The iPhone burner key lives in browser storage, which is fine for change, not for savings.
+- **Small amounts only.** The iPhone burner key lives in browser storage, which is fine for change, not for savings.

@@ -59,7 +59,7 @@ static char review_text[80];
 static uint8_t response[1 + 4 + 72 + 20];
 static size_t response_len;
 
-// Pocket mode: after one approval on the Flex, payments up to the per-tap cap are signed on the
+// Budget mode: after one approval on the Flex, payments up to the per-tap cap are signed on the
 // first tap, without review, until the total or the number of payments is used up, or the app
 // closes (RAM only). All three limits are picked in Settings; defaults 5 USDC per tap,
 // 20 USDC in total, 10 payments.
@@ -70,10 +70,10 @@ static const uint32_t PER_TAP_CAPS[NB_CAPS] = {1, 5, 10, 50};   // USDC
 static const uint32_t TOTAL_CAPS[NB_CAPS] = {10, 20, 100, 500};  // USDC
 static const uint32_t COUNT_CAPS[NB_CAPS] = {1, 5, 10, 25};       // payments
 static uint8_t per_tap_idx, total_idx, count_idx;  // set in app_main: apps can't have initialized .data
-static uint64_t pocket_left;          // 0 = off
-static uint32_t pocket_taps_left;
-static uint8_t pocket_paid[REQ_LEN];  // last pocket payment, so a retried tap gets the same reply
-static bool pocket_paid_valid;        // false until a pocket payment, and once `response` changes
+static uint64_t budget_left;          // 0 = off
+static uint32_t budget_taps_left;
+static uint8_t budget_paid[REQ_LEN];  // last budget payment, so a retried tap gets the same reply
+static bool budget_paid_valid;        // false until a budget payment, and once `response` changes
 static char home_text[80];
 
 static void app_quit(void) {
@@ -85,7 +85,7 @@ static void format_usdc(char *out, size_t len, uint64_t micro) {
     format_fpu64_trimmed(out, len, micro, 6);
 }
 
-static void pocket_toggle(void);
+static void budget_toggle(void);
 static void settings_changed(int token, uint8_t index, int page);
 
 enum { PER_TAP_TOKEN = FIRST_USER_TOKEN, TOTAL_TOKEN, COUNT_TOKEN };
@@ -103,15 +103,15 @@ static void ui_update(void) {
     settings_contents[0].content.choicesList.initChoice = per_tap_idx;
     settings_contents[1].content.choicesList.initChoice = total_idx;
     settings_contents[2].content.choicesList.initChoice = count_idx;
-    if (pocket_left) {
+    if (budget_left) {
         char left[24];
-        format_usdc(left, sizeof(left), pocket_left);
-        snprintf(home_text, sizeof(home_text), "Pocket mode: %s USDC left\nfor %u more payment%s",
-                 left, (unsigned) pocket_taps_left, pocket_taps_left == 1 ? "" : "s");
-        home_action.text = "Turn off pocket mode";
+        format_usdc(left, sizeof(left), budget_left);
+        snprintf(home_text, sizeof(home_text), "Budget mode: %s USDC left\nfor %u more payment%s",
+                 left, (unsigned) budget_taps_left, budget_taps_left == 1 ? "" : "s");
+        home_action.text = "Turn off budget mode";
     } else {
-        snprintf(home_text, sizeof(home_text), "Hold your iPhone\nnear the screen");
-        home_action.text = "Turn on pocket mode";
+        snprintf(home_text, sizeof(home_text), "Manual mode: two taps\nHold your iPhone\nnear the screen");
+        home_action.text = "Turn on budget mode";
     }
 }
 
@@ -141,7 +141,7 @@ static void ui_home(void) {
     settings.callbackCallNeeded = false;
     settings.contentsList = settings_contents;
     settings.nbContents = 3;
-    home_action.callback = pocket_toggle;
+    home_action.callback = budget_toggle;
     home_action.style = SOFT_HOME_ACTION;
     ui_update();
     nbgl_useCaseHomeAndSettings(APPNAME,
@@ -154,7 +154,7 @@ static void ui_home(void) {
                                 app_quit);
 }
 
-// A new total or count restarts that part of a running pocket.
+// A new total or count restarts that part of a running budget.
 static void settings_changed(int token, uint8_t index, int page) {
     (void) page;
     if (index >= NB_CAPS) {
@@ -164,33 +164,33 @@ static void settings_changed(int token, uint8_t index, int page) {
         per_tap_idx = index;
     } else if (token == TOTAL_TOKEN) {
         total_idx = index;
-        if (pocket_left) {
-            pocket_left = USDC(TOTAL_CAPS[total_idx]);
+        if (budget_left) {
+            budget_left = USDC(TOTAL_CAPS[total_idx]);
         }
     } else if (token == COUNT_TOKEN) {
         count_idx = index;
-        if (pocket_left) {
-            pocket_taps_left = COUNT_CAPS[count_idx];
+        if (budget_left) {
+            budget_taps_left = COUNT_CAPS[count_idx];
         }
     }
     ui_update();
 }
 
-static void pocket_choice(bool confirm) {
+static void budget_choice(bool confirm) {
     if (!confirm) {
         ui_home();
         return;
     }
-    pocket_left = USDC(TOTAL_CAPS[total_idx]);
-    pocket_taps_left = COUNT_CAPS[count_idx];
-    nbgl_useCaseStatus("Pocket mode on", true, ui_home);
+    budget_left = USDC(TOTAL_CAPS[total_idx]);
+    budget_taps_left = COUNT_CAPS[count_idx];
+    nbgl_useCaseStatus("Budget mode on", true, ui_home);
 }
 
-static void pocket_toggle(void) {
+static void budget_toggle(void) {
     static char text[200];
-    if (pocket_left) {
-        pocket_left = 0;
-        nbgl_useCaseStatus("Pocket mode off", true, ui_home);
+    if (budget_left) {
+        budget_left = 0;
+        nbgl_useCaseStatus("Budget mode off", true, ui_home);
         return;
     }
     snprintf(text, sizeof(text),
@@ -199,7 +199,7 @@ static void pocket_toggle(void) {
              (unsigned) COUNT_CAPS[count_idx], COUNT_CAPS[count_idx] == 1 ? "" : "s",
              (unsigned) PER_TAP_CAPS[per_tap_idx],
              (unsigned) TOTAL_CAPS[total_idx]);
-    nbgl_useCaseChoice(&C_tapcash_64px, "Turn on pocket mode?", text, "Turn on", "Cancel", pocket_choice);
+    nbgl_useCaseChoice(&C_tapcash_64px, "Turn on budget mode?", text, "Turn on", "Cancel", budget_choice);
 }
 
 static bool get_address(uint8_t out[20]) {
@@ -231,7 +231,7 @@ static size_t der_int(uint8_t *out, const uint8_t v[32]) {
 static bool sign_request(void) {
     uint8_t from[20], buf[7 * 32], digest[32], r[32], s[32];
     uint32_t info = 0;
-    pocket_paid_valid = false;  // `response` is about to change
+    budget_paid_valid = false;  // `response` is about to change
     if (!get_address(from)) {
         return false;
     }
@@ -370,28 +370,28 @@ static void handle_u2f_sign(uint8_t p1, const uint8_t *data, int lc) {
         return;
     }
 
-    // Checked before pocket_left: the last allowed payment turns pocket mode off
-    if (pocket_paid_valid && memcmp(kh, pocket_paid, REQ_LEN) == 0) {  // iOS retried a tap we already paid
+    // Checked before budget_left: the last allowed payment turns budget mode off
+    if (budget_paid_valid && memcmp(kh, budget_paid, REQ_LEN) == 0) {  // iOS retried a tap we already paid
         io_send_response_pointer(response, response_len, SW_OK);
         return;
     }
 
-    // Pocket mode: small payments are signed on this tap, without review. Not while a review is open.
-    if (pocket_left && state != REVIEW) {
+    // Budget mode: small payments are signed on this tap, without review. Not while a review is open.
+    if (budget_left && state != REVIEW) {
         uint64_t value = read_u64_be(kh, 20);
-        if (value <= USDC(PER_TAP_CAPS[per_tap_idx]) && value <= pocket_left) {
+        if (value <= USDC(PER_TAP_CAPS[per_tap_idx]) && value <= budget_left) {
             memcpy(request, kh, REQ_LEN);
             if (!sign_request()) {
                 io_send_sw(SW_CRYPTO);
                 return;
             }
             state = IDLE;  // an approved but uncollected review is dropped: its response was overwritten
-            pocket_left -= value;
-            if (--pocket_taps_left == 0) {
-                pocket_left = 0;  // all payments used: pocket mode off
+            budget_left -= value;
+            if (--budget_taps_left == 0) {
+                budget_left = 0;  // all payments used: budget mode off
             }
-            memcpy(pocket_paid, kh, REQ_LEN);
-            pocket_paid_valid = true;
+            memcpy(budget_paid, kh, REQ_LEN);
+            budget_paid_valid = true;
             io_send_response_pointer(response, response_len, SW_OK);
             char amount[24];
             format_usdc(amount, sizeof(amount), value);
