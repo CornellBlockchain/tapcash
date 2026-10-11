@@ -483,6 +483,8 @@ All of this is a **signed IOU** from a device-capped cash account (a spending ca
 until someone submits the auth on-chain.
 
 ### B6. GATE 1: does the reader power on, and does CARD_DETECTED fire?
+
+> **Already known from TapCash (2026-10-11, `mvp/tapcash/`):** a sideloaded C app built with `ENABLE_NFC = 1` runs NFC **card emulation** on a retail Flex and is read by an iPhone (Safari WebAuthn). So the payee side of ledger-cash is plausible on hardware. Reader mode (`ENABLE_NFC_READER`, this gate) is still untested.
 You need a **contactless bank card**. It answers ISO-DEP. A transit or hotel card may not.
 1. Start the tap with USB connected:
    ```powershell

@@ -1,0 +1,90 @@
+<!doctype html>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TapCash</title>
+<style>
+  body { font: 16px -apple-system, sans-serif; margin: 24px; }
+  button { font-size: 20px; padding: 14px 24px; }
+  input { font-size: 20px; width: 8em; }
+  pre { white-space: pre-wrap; word-break: break-all; font-size: 13px; }
+  header { display: flex; align-items: center; gap: 10px; }
+  header h1 { margin: 0; font-size: 22px; }
+</style>
+<header><svg viewBox="0 0 512 512" width="32" height="32" aria-hidden="true"><rect width="512" height="512" rx="112" fill="#0E0E10"/><g transform="rotate(-12 256 256)" fill="none" stroke-width="26" stroke-linecap="round"><rect x="176" y="136" width="160" height="240" rx="30" stroke="#fff"/><rect x="204" y="292" width="104" height="56" rx="12" stroke="#fff" stroke-width="20"/><path d="M319 99A66 66 0 0 1 373 153M341 61A108 108 0 0 1 411 131M193 413A66 66 0 0 1 139 359M171 451A108 108 0 0 1 101 381" stroke="#C6FF3D"/></g></svg><h1>TapCash</h1></header>
+<p>Receive <input id="amount" type="number" inputmode="decimal" value="1" min="0.000001" step="any"> USDC</p>
+<p><button id="go">Tap Ledger</button></p>
+<pre id="wallet"></pre>
+<pre id="log"></pre>
+<script type="module">
+// The iPhone is the receiver's wallet: a burner key in localStorage that also pays gas.
+// WebAuthn is the NFC transport: press, tap, approve on the Flex, press, tap again.
+import { createPublicClient, createWalletClient, http, parseUnits, formatUnits, formatEther,
+         recoverTypedDataAddress, serializeSignature, toHex } from 'https://esm.sh/viem@2.57.4';
+import { privateKeyToAccount, generatePrivateKey } from 'https://esm.sh/viem@2.57.4/accounts';
+import { baseSepolia } from 'https://esm.sh/viem@2.57.4/chains';
+import { USDC, DOMAIN, TYPES, buildRequest, parseRequest, parseResponse } from './tapcash.js';
+
+const $ = id => document.getElementById(id);
+const log = s => $('log').textContent += s + '\n';
+const ABI = [
+  { name: 'balanceOf', type: 'function', stateMutability: 'view', inputs: [{ type: 'address' }], outputs: [{ type: 'uint256' }] },
+  { name: 'transferWithAuthorization', type: 'function', stateMutability: 'nonpayable', outputs: [], inputs: [
+    { name: 'from', type: 'address' }, { name: 'to', type: 'address' }, { name: 'value', type: 'uint256' },
+    { name: 'validAfter', type: 'uint256' }, { name: 'validBefore', type: 'uint256' }, { name: 'nonce', type: 'bytes32' },
+    { name: 'v', type: 'uint8' }, { name: 'r', type: 'bytes32' }, { name: 's', type: 'bytes32' }] },
+];
+
+localStorage.tcKey ??= generatePrivateKey();
+const account = privateKeyToAccount(localStorage.tcKey);
+const pub = createPublicClient({ chain: baseSepolia, transport: http() });
+const wallet = createWalletClient({ account, chain: baseSepolia, transport: http() });
+
+async function showWallet() {
+  const [eth, usdc] = await Promise.all([
+    pub.getBalance({ address: account.address }),
+    pub.readContract({ address: USDC, abi: ABI, functionName: 'balanceOf', args: [account.address] }),
+  ]);
+  $('wallet').textContent = `iPhone wallet ${account.address}\n${formatUnits(usdc, 6)} USDC · ${formatEther(eth)} ETH (gas)`
+    + (eth === 0n ? '\n⚠ needs a little Base Sepolia ETH to pay gas' : '');
+}
+showWallet();
+
+let pending = null;  // same key handle for both taps
+$('go').onclick = async () => {
+  const value = parseUnits($('amount').value, 6);
+  if (!pending || pending.value !== value) {
+    const nonce = toHex(crypto.getRandomValues(new Uint8Array(32)));
+    const validBefore = Math.floor(Date.now() / 1000) + 3600;
+    pending = { value, kh: buildRequest(account.address, value, validBefore, nonce) };
+    log(`>> request ${formatUnits(value, 6)} USDC`);
+  }
+  let cred;
+  try {
+    cred = await navigator.credentials.get({ publicKey: {
+      challenge: crypto.getRandomValues(new Uint8Array(32)),
+      allowCredentials: [{ type: 'public-key', id: pending.kh, transports: ['nfc'] }],
+      userVerification: 'discouraged',
+      timeout: 60000,
+    }});
+  } catch (e) {
+    return log(`-- ${e.name} (first tap? approve on the Flex, then press again)`);
+  }
+  try {
+    const req = parseRequest(pending.kh);
+    const { from, v, r, s } = parseResponse(cred.response.authenticatorData, cred.response.signature);
+    const signer = await recoverTypedDataAddress({ domain: DOMAIN, types: TYPES, primaryType: 'TransferWithAuthorization',
+      message: { from, ...req, validAfter: 0n }, signature: serializeSignature({ r, s, v: BigInt(v) }) });
+    if (signer.toLowerCase() !== from.toLowerCase()) throw new Error(`signature check failed: ${signer} != ${from}`);
+    log(`<< signed by Flex ${from}`);
+    const args = [from, req.to, req.value, 0n, req.validBefore, req.nonce, v, r, s];
+    const { request } = await pub.simulateContract({ account, address: USDC, abi: ABI, functionName: 'transferWithAuthorization', args });
+    const hash = await wallet.writeContract(request);
+    log(`.. sent https://sepolia.basescan.org/tx/${hash}`);
+    await pub.waitForTransactionReceipt({ hash });
+    log('✓ received');
+    pending = null;
+    showWallet();
+  } catch (e) {
+    log('!! ' + (e.shortMessage || e.message));
+  }
+};
+</script>

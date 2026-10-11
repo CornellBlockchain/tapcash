@@ -180,3 +180,9 @@ Sahas: "i don't just mean nfc research, i mean ledger research in general". Eigh
 - Tests: `agent/test_agent.py` (offline) and `agent/agent_demo.py` (emulated end to end, offline parser) ALL PASS, re-verified independently with LLM keys unset. One run with `AGENT_DEMO_LLM=1` used a live OpenRouter `openai/gpt-4.1-mini` call (3 live calls total). Review: 1 high (summed-quantity cap), 4 medium (decimal parsing, LLM timeout, cancelled-vs-settled nonce, voice overclaim), all fixed. Voice (`--mic`) not run: faster-whisper/sounddevice not installed.
 - Note for Sahas: the `OPENAI_API_KEY` in this PC's user environment returns 401 invalid_api_key; OpenRouter works.
 - Video refreshed with the till and agent scenes.
+
+## 2026-10-11 — merged all branches into `main`
+
+- Collaborator (Hrishabh Ayush) pushed branch `tapcash`: **TapCash**, a Flex app + iPhone page. Safari WebAuthn over NFC carries a payment request to the Flex (U2F key handle); the Flex shows "Send payment? 5 USDC on Base Sepolia to 0x…", signs EIP-3009 itself, and returns the signature on a second tap; the page submits it. **Works on real hardware** (a Base Sepolia settlement on 2026-10-11); live page https://tapcash-ruby.vercel.app. Built with `ENABLE_NFC = 1`, path `44'/60'`. This is the first real-hardware proof in the repo that a sideloaded app can run NFC card emulation on a retail Flex (ledger-cash's payee side); reader mode is still untested.
+- Merged `ledger-cash` + `tapcash` into `main` with a no-ff merge (the collaborator's commits keep his authorship). Per Sahas: keep all work except the ideation material. Dropped `IDEAS.md` only. Restored the files `tapcash` had removed: `research/`, `spikes/`, `proto/`, `mvp/nfc-probe/`, `WORKLOG.md`. Root README now presents both projects side by side. The full pre-merge exploration state is tagged `archive/exploration-2026-10-11`.
+- Prior-art search done: `research/prior-art-ledger-cash.md`.

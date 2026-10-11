@@ -1,0 +1,7 @@
+build/
+bin/
+debug/
+node_modules/
+.vercel/
+.env*
+.DS_Store
