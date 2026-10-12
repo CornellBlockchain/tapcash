@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>TapCash setup</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap">
+<style>
+  :root { --ink: #0E0E10; --muted: #6B6B70; --soft: #F3F3F1; --lime: #C6FF3D; --lime-dark: #7FB800; }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0 auto; max-width: 440px; min-height: 100dvh; display: flex; flex-direction: column; gap: 16px; padding: 16px 24px;
+    font-family: Inter, -apple-system, system-ui, sans-serif; color: var(--ink); background: #fff;
+  }
+  button { font-family: inherit; color: inherit; cursor: pointer; }
+  header { display: flex; align-items: center; gap: 10px; }
+  header b { flex: 1; font-size: 20px; }
+  .pill { background: var(--soft); color: var(--muted); font-size: 12px; font-weight: 500; border-radius: 999px; padding: 5px 10px; }
+  main { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 16px; text-align: center; }
+  [hidden] { display: none !important; }
+  .grow { flex: 1; }
+  h2 { margin: 0; font-size: 28px; font-weight: 600; line-height: 1.2; }
+  p { margin: 0; font-size: 15px; line-height: 1.4; color: var(--muted); }
+  .err { color: #C23B22; min-height: 1.4em; }
+  .chip { align-self: stretch; display: flex; align-items: center; gap: 12px; background: var(--soft); border-radius: 16px; padding: 14px 16px; text-align: left; }
+  .chip::before { content: ""; flex: none; width: 10px; height: 10px; border-radius: 50%; background: var(--lime-dark); }
+  .chip small { display: block; font-size: 13px; font-weight: 500; color: var(--muted); }
+  .chip strong { font-size: 17px; font-weight: 600; }
+  .addr { align-self: stretch; display: flex; align-items: center; gap: 12px; background: var(--soft); border-radius: 16px; padding: 16px; text-align: left; font-size: 14px; font-weight: 500; word-break: break-all; }
+  .addr button, a { background: none; border: 0; color: var(--lime-dark); font-size: 15px; font-weight: 600; }
+  .btn { align-self: stretch; height: 56px; border-radius: 999px; border: 2px solid var(--ink); background: var(--ink); color: #fff; font-size: 17px; font-weight: 600; }
+  .btn:disabled { opacity: .3; }
+  .halo { display: flex; padding: 24px; border-radius: 50%; background: rgb(198 255 61 / .25); }
+  canvas { border-radius: 16px; }
+</style>
+
+<header>
+  <svg viewBox="0 0 512 512" width="32" height="32" aria-hidden="true"><rect width="512" height="512" rx="112" fill="#0E0E10"/><g transform="rotate(-12 256 256)" fill="none" stroke-width="26" stroke-linecap="round"><rect x="176" y="136" width="160" height="240" rx="30" stroke="#fff"/><rect x="204" y="292" width="104" height="56" rx="12" stroke="#fff" stroke-width="20"/><path d="M319 99A66 66 0 0 1 373 153M341 61A108 108 0 0 1 411 131M193 413A66 66 0 0 1 139 359M171 451A108 108 0 0 1 101 381" stroke="#C6FF3D"/></g></svg>
+  <b>TapCash</b>
+  <span class="pill">Setup</span>
+</header>
+
+<main>
+  <section id="start" style="display:contents">
+    <div class="grow"></div>
+    <div class="halo"><svg width="120" height="120" viewBox="0 0 512 512" aria-hidden="true"><g fill="none" stroke-width="14" stroke-linecap="round"><rect x="176" y="136" width="160" height="240" rx="28" stroke="#0E0E10"/><rect x="194" y="296" width="124" height="62" rx="14" stroke="#0E0E10" stroke-width="12"/></g></svg></div>
+    <h2>Set up your Ledger</h2>
+    <p>Plug your Flex into this computer, unlock it and open TapCash. Then confirm its address on the Flex screen.</p>
+    <p class="err" id="err"></p>
+    <div class="grow"></div>
+    <button class="btn" id="connect">Connect Ledger</button>
+  </section>
+
+  <section id="ready" style="display:contents" hidden>
+    <h2>Your TapCash address</h2>
+    <p>Confirmed on your Flex. Send Base Sepolia USDC here to pay with it.</p>
+    <canvas id="qr"></canvas>
+    <div class="addr"><span class="grow" id="address"></span><button id="copy">Copy</button></div>
+    <div class="chip"><div><small>USDC</small><strong id="usdc">…</strong></div></div>
+    <div class="chip"><div><small>ETH (not needed: the iPhone pays gas)</small><strong id="eth">…</strong></div></div>
+    <a id="scan" target="_blank" rel="noopener">View on Basescan ↗</a>
+    <p>Test USDC: <a href="https://faucet.circle.com" target="_blank" rel="noopener">faucet.circle.com ↗</a> (choose Base Sepolia)</p>
+  </section>
+</main>
+
+<script type="importmap">{ "imports": { "viem": "https://esm.sh/viem@2.57.4", "viem/": "https://esm.sh/viem@2.57.4/" } }</script>
+<script type="module">
+// Desktop setup page: talks to the Flex over USB with Ledger's Device Management Kit (WebHID, Chrome/Edge).
+// It asks the TapCash app for its address with E0 02 P1=1, which shows the address on the Flex and only
+// answers once the user confirms, then shows the balance and a QR code for funding.
+import { DeviceManagementKitBuilder } from 'https://esm.sh/@ledgerhq/device-management-kit@1.11.0';
+import { webHidTransportFactory } from 'https://esm.sh/@ledgerhq/device-transport-kit-web-hid@1.2.4';
+import { createPublicClient, http, formatUnits, getAddress, erc20Abi } from 'viem';
+import { baseSepolia } from 'viem/chains';
+import QRCode from 'https://esm.sh/qrcode@1.5.4';
+import { USDC } from './tapcash.js';
+
+const $ = id => document.getElementById(id);
+const hex = b => [...b].map(x => x.toString(16).padStart(2, '0')).join('');
+const fail = msg => { $('err').textContent = msg; $('connect').disabled = false; $('connect').textContent = 'Connect Ledger'; };
+if (!navigator.hid) fail('Open this page in Chrome or Edge on a computer: it needs WebHID to reach the Flex over USB.');
+
+const dmk = new DeviceManagementKitBuilder().addTransport(webHidTransportFactory).build();
+
+$('connect').onclick = async () => {
+  $('connect').disabled = true; $('err').textContent = '';
+  try {
+    $('connect').textContent = 'Choose your Ledger…';
+    const device = await new Promise((ok, no) => {
+      // next can fire before subscribe() returns, so unsubscribe on the next microtask
+      const sub = dmk.startDiscovering({}).subscribe({ next: d => { ok(d); queueMicrotask(() => sub.unsubscribe()); }, error: no });
+    });
+    // The refresher polls with dashboard commands that the TapCash app doesn't answer
+    const sessionId = await dmk.connect({ device, sessionRefresherOptions: { isRefresherDisabled: true } });
+    $('connect').textContent = 'Confirm the address on your Flex…';
+    const r = await dmk.sendApdu({ sessionId, apdu: Uint8Array.from([0xe0, 0x02, 0x01, 0x00, 0x00]), abortTimeout: 120000 });
+    const sw = hex(r.statusCode);
+    if (sw === '6985') return fail('Address rejected on the Flex.');
+    if (sw !== '9000' || r.data.length !== 20) return fail(`Open the TapCash app on the Flex, then try again (status ${sw}).`);
+    await show(getAddress('0x' + hex(r.data)));
+  } catch (e) {
+    fail(e?.message || String(e));
+  }
+};
+
+async function show(address) {
+  $('start').hidden = true; $('ready').hidden = false;
+  $('address').textContent = address;
+  $('scan').href = `https://sepolia.basescan.org/address/${address}`;
+  QRCode.toCanvas($('qr'), address, { width: 200, margin: 1 });
+  $('copy').onclick = async () => { await navigator.clipboard.writeText(address); $('copy').textContent = 'Copied'; };
+  const pub = createPublicClient({ chain: baseSepolia, transport: http() });
+  const [usdc, eth] = await Promise.all([
+    pub.readContract({ address: USDC, abi: erc20Abi, functionName: 'balanceOf', args: [address] }),
+    pub.getBalance({ address }),
+  ]);
+  $('usdc').textContent = formatUnits(usdc, 6) + ' USDC';
+  $('eth').textContent = formatUnits(eth, 18) + ' ETH';
+}
+</script>

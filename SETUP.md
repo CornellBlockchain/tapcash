@@ -61,6 +61,7 @@ docker run --rm -d --name speculos -p 5001:5000 -v "$PWD":/app -w /app/flex-app 
 | `node test.mjs` | all | Manual mode end to end: both taps, page parsing, on-chain simulation |
 | `node test-budget.mjs` | `one-tap` | Budget mode: limits, Settings pages, the one-tap path, falling back to manual mode |
 | `node test-modes.mjs` | `card-mode` | Card mode, including the one-minute timeout (the test takes about 2 minutes), plus budget mode |
+| `node test-setup-dmk.cjs` | `dmk-setup` | Setup page's flow through DMK: the address shown on the Flex, confirm and cancel |
 | `node test-cashout.mjs` | `cashout-*` | Cash-out receipt parsing, with no key needed (see step 7 for the live run) |
 
 - **Restart the emulator** between test files with `docker restart speculos`.

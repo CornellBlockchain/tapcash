@@ -454,6 +454,40 @@ static void handle_u2f_sign(uint8_t p1, const uint8_t *data, int lc) {
     }
 }
 
+#define P1_SHOW_ADDR 0x01
+static uint8_t shown_addr[20];
+static char addr_text[43];
+
+// EIP-55 mixed-case checksum, so the Flex shows the address exactly as the setup page does.
+static void format_address(char out[43], const uint8_t a[20]) {
+    static const char HEX[] = "0123456789abcdef";
+    uint8_t hash[32];
+    out[0] = '0';
+    out[1] = 'x';
+    for (int i = 0; i < 20; i++) {
+        out[2 + 2 * i] = HEX[a[i] >> 4];
+        out[3 + 2 * i] = HEX[a[i] & 0x0F];
+    }
+    cx_keccak_256_hash((const uint8_t *) out + 2, 40, hash);
+    for (int i = 0; i < 40; i++) {
+        uint8_t nibble = (i % 2) ? (hash[i / 2] & 0x0F) : (hash[i / 2] >> 4);
+        if (out[2 + i] >= 'a' && nibble >= 8) {
+            out[2 + i] -= 'a' - 'A';
+        }
+    }
+    out[42] = '\0';
+}
+
+static void address_choice(bool confirm) {
+    if (confirm) {
+        io_send_response_pointer(shown_addr, sizeof(shown_addr), SW_OK);
+        nbgl_useCaseReviewStatus(STATUS_TYPE_ADDRESS_VERIFIED, ui_home);
+    } else {
+        io_send_sw(SW_NOT_SATISFIED);
+        nbgl_useCaseReviewStatus(STATUS_TYPE_ADDRESS_REJECTED, ui_home);
+    }
+}
+
 void app_main(void) {
     const uint8_t *data;
 
@@ -474,12 +508,16 @@ void app_main(void) {
         int lc = parse_apdu(G_io_apdu_buffer, len, &data);
 
         if (cla == CLA_TAPCASH && ins == INS_GET_ADDR) {
-            // Silent, like other Ledger apps' get-public-key: the address is needed to fund it
-            uint8_t addr[20];
-            if (get_address(addr)) {
-                io_send_response_pointer(addr, sizeof(addr), SW_OK);
-            } else {
+            // P1 0: silent, like other Ledger apps' get-public-key (the address is needed to fund it).
+            // P1 1: shown on the Flex first; the reply comes once the user confirms (setup page).
+            if (!get_address(shown_addr)) {
                 io_send_sw(SW_CRYPTO);
+            } else if (p1 == P1_SHOW_ADDR) {
+                format_address(addr_text, shown_addr);
+                nbgl_useCaseAddressReview(addr_text, NULL, &C_tapcash_64px, "Verify TapCash address", NULL,
+                                          address_choice);
+            } else {
+                io_send_response_pointer(shown_addr, sizeof(shown_addr), SW_OK);
             }
         } else if (cla == CLA_ISO && (ins == INS_SELECT || ins == INS_U2F_SIGN) && lc < 0) {
             io_send_sw(SW_WRONG_LEN);

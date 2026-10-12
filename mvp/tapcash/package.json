@@ -1,5 +1,9 @@
 {
   "private": true,
   "type": "module",
-  "devDependencies": { "viem": "2.57.4" }
+  "devDependencies": {
+    "@ledgerhq/device-management-kit": "1.11.0",
+    "@ledgerhq/device-transport-kit-speculos": "1.2.1",
+    "viem": "2.57.4"
+  }
 }
