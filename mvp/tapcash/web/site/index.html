@@ -4,6 +4,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>TapCash: tap your Ledger, pay in USDC</title>
 <meta name="description" content="Tap a Ledger Flex to an iPhone, approve on the Flex, and USDC moves on Base. The receiver needs only Safari; the payer needs no ETH.">
+<link rel="icon" href="/icon.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap">
 <style>
@@ -95,8 +96,8 @@
     .hero { grid-template-columns: 1.15fr .85fr; padding-top: 48px; }
     section { padding: 88px 0; }
     .steps { grid-template-columns: repeat(4, 1fr); }
-    .modes, .tools { grid-template-columns: repeat(3, 1fr); }
-    .security { grid-template-columns: repeat(2, 1fr); }
+    .modes { grid-template-columns: repeat(3, 1fr); }
+    .security, .tools { grid-template-columns: repeat(2, 1fr); }
     .cash { grid-template-columns: 1fr 1fr; }
   }
 </style>
@@ -143,9 +144,9 @@
         <p>The Flex shows the amount and recipient. Approve on the Flex, then tap again.</p>
       </li>
       <li>
-        <div class="phone"><img src="iphone-done.webp" width="520" height="1125" loading="lazy" alt="iPhone screen: plus 5 USDC received, with a Basescan link"></div>
+        <div class="phone"><img src="iphone-done.webp" width="520" height="1125" loading="lazy" alt="iPhone screen: plus 5 USDC received, with a Basescan link and a Move to my Ledger button"></div>
         <h3><span class="num">4</span>USDC arrives</h3>
-        <p>The iPhone checks the signature, pays the gas, and the USDC lands.</p>
+        <p>The iPhone checks the signature, pays the gas, and the USDC lands. Move it to your Ledger whenever you like.</p>
       </li>
     </ol>
   </section>
@@ -218,6 +219,7 @@
       <div class="chip"><h3>Ledger signer</h3><p>A custom TapCash app for the Ledger Flex, written in C with the Ledger secure SDK.</p></div>
       <div class="chip"><h3>Device Management Kit</h3><p>The desktop setup page, <a href="/setup.html">/setup.html</a>, connects to the Flex over USB and has you confirm its address on the device.</p></div>
       <div class="chip"><h3>Ledger Wallet CLI</h3><p>Check the TapCash address balance and move USDC in or out from a terminal, confirmed on the Ledger.</p></div>
+      <div class="chip"><h3>Ledger Wallet</h3><p>Move received USDC off the iPhone: connect the Ledger Wallet app over WalletConnect to fill in your Ledger address. Nothing is signed there.</p></div>
     </div>
   </section>
 </main>
