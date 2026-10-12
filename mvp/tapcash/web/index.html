@@ -62,6 +62,8 @@
   .vcard-num { font: 400 20px ui-monospace, Menlo, monospace; letter-spacing: 2px; color: #C9CCD3; }
   .vcard-bottom i { font: italic 800 28px Inter, sans-serif; letter-spacing: -1px; }
   a.btn { display: flex; align-items: center; justify-content: center; text-decoration: none; }
+  a.btn[hidden] { display: none; }
+  a.btn:not([href]) { opacity: .3; pointer-events: none; }
   .wc-qr { align-self: center; display: flex; flex-direction: column; align-items: center; gap: 6px; }
   .wc-qr img { width: 180px; height: 180px; image-rendering: pixelated; }
   .wc-qr[hidden] { display: none; }
@@ -320,6 +322,11 @@ const mobile = /iPhone|iPad|Android/.test(navigator.userAgent);
 let wc = null, wcPending = null;
 async function prepareLedgerWallet() {
   if (!WC_PROJECT_ID) return;
+  if (mobile) {
+    $('wcLink').removeAttribute('href');
+    $('wcLink').textContent = 'Preparing Ledger Wallet…';
+    $('wcLink').hidden = false;
+  }
   try {
     if (!wc) {
       const { SignClient } = await import('https://esm.sh/@walletconnect/sign-client@2.26.0');
@@ -333,7 +340,7 @@ async function prepareLedgerWallet() {
     wcPending = { since };
     if (mobile) {
       $('wcLink').href = LEDGER_WALLET_LINK + encodeURIComponent(uri);
-      $('wcLink').hidden = false;
+      $('wcLink').textContent = 'Connect Ledger Wallet';
     } else {
       const QRCode = (await import('https://esm.sh/qrcode@1.5.4')).default;
       $('wcQrImg').src = await QRCode.toDataURL(uri, { margin: 1, width: 360 });
@@ -341,6 +348,7 @@ async function prepareLedgerWallet() {
     }
     approval().then(useLedgerWalletSession, () => {});
   } catch (e) {
+    $('wcLink').hidden = true;
     $('moveErr').textContent = 'Ledger Wallet connect unavailable: ' + (e.message || e);
   }
 }
