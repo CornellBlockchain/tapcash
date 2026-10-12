@@ -2,8 +2,8 @@
 
 // Index = the request's chain byte; same order as CHAIN_NAMES / DOMAIN_SEPARATOR in app_main.c.
 export const CHAINS = [
-  { name: 'Base Sepolia', domain: { name: 'USDC', version: '2', chainId: 84532, verifyingContract: '0x036CbD53842c5426634e7929541eC2318f3dCF7e' } },
-  { name: 'Base', domain: { name: 'USD Coin', version: '2', chainId: 8453, verifyingContract: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913' } },
+  { name: 'Base Sepolia', explorer: 'https://sepolia.basescan.org', domain: { name: 'USDC', version: '2', chainId: 84532, verifyingContract: '0x036CbD53842c5426634e7929541eC2318f3dCF7e' } },
+  { name: 'Base', explorer: 'https://basescan.org', domain: { name: 'USD Coin', version: '2', chainId: 8453, verifyingContract: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913' } },
 ];
 export const DOMAIN = CHAINS[0].domain;
 export const USDC = DOMAIN.verifyingContract;

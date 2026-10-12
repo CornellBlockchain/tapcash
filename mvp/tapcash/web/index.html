@@ -17,7 +17,8 @@
   button { font-family: inherit; color: inherit; cursor: pointer; }
   header { display: flex; align-items: center; gap: 10px; }
   header b { flex: 1; font-size: 20px; }
-  .pill { background: var(--soft); color: var(--muted); font-size: 12px; font-weight: 500; border-radius: 999px; padding: 5px 10px; }
+  .pill { background: var(--soft); color: var(--muted); font-size: 12px; font-weight: 500; border-radius: 999px; padding: 5px 10px; border: 0; }
+  .pill.mainnet { background: var(--ink); color: var(--lime); }
   .screen { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 16px; text-align: center; }
   .screen[hidden], .chip[hidden] { display: none; }
   .grow { flex: 1; }
@@ -74,14 +75,14 @@
 <header>
   <svg viewBox="0 0 512 512" width="32" height="32" aria-hidden="true"><rect width="512" height="512" rx="112" fill="#0E0E10"/><g transform="rotate(-12 256 256)" fill="none" stroke-width="26" stroke-linecap="round"><rect x="176" y="136" width="160" height="240" rx="30" stroke="#fff"/><rect x="204" y="292" width="104" height="56" rx="12" stroke="#fff" stroke-width="20"/><path d="M319 99A66 66 0 0 1 373 153M341 61A108 108 0 0 1 411 131M193 413A66 66 0 0 1 139 359M171 451A108 108 0 0 1 101 381" stroke="#C6FF3D"/></g></svg>
   <b>TapCash</b>
-  <span class="pill">Base Sepolia</span>
+  <button class="pill" id="net">Base Sepolia ⇄</button>
 </header>
 
 <section id="setup" class="screen" hidden>
   <div class="grow"></div>
   <div id="setupArt"></div>
   <h2>Add a little gas<br>to start receiving</h2>
-  <p>Your iPhone wallet pays the network fee, so the payer doesn't need any ETH. Send ~0.001 Base Sepolia ETH to:</p>
+  <p>Your iPhone wallet pays the network fee, so the payer doesn't need any ETH. Send ~0.0002 <span class="netName">Base Sepolia</span> ETH, enough for hundreds of payments (each costs under a cent), to:</p>
   <div class="addr"><span class="grow" id="address"></span><button id="copy">Copy</button></div>
   <p class="err" id="setupErr"></p>
   <div class="grow"></div>
@@ -166,8 +167,8 @@
 import { createPublicClient, createWalletClient, http, parseUnits, formatUnits,
          recoverTypedDataAddress, serializeSignature, toHex, getAddress, isAddress } from 'https://esm.sh/viem@2.57.4';
 import { privateKeyToAccount, generatePrivateKey } from 'https://esm.sh/viem@2.57.4/accounts';
-import { baseSepolia } from 'https://esm.sh/viem@2.57.4/chains';
-import { USDC, DOMAIN, TYPES, ADDR_REQUEST, buildRequest, parseRequest, parseResponse } from './tapcash.js';
+import { base, baseSepolia } from 'https://esm.sh/viem@2.57.4/chains';
+import { CHAINS, TYPES, ADDR_REQUEST, buildRequest, parseRequest, parseResponse } from './tapcash.js';
 
 const $ = id => document.getElementById(id);
 const show = id => document.querySelectorAll('.screen').forEach(s => (s.hidden = s.id !== id));
@@ -196,10 +197,25 @@ $('holdArt').innerHTML = art(200, '#0E0E10', '#7FB800');
 $('setupArt').innerHTML = art(120, '#fff', '#C6FF3D', '#0E0E10');
 $('moveArt').innerHTML = art(110, '#0E0E10', '#7FB800');
 
+// Network: Base Sepolia (default) or Base mainnet, picked with the header pill. Switching reloads the
+// page so every client and address below is built for one chain. Same burner key on both chains.
+const chainIdx = localStorage.tcChain === '1' ? 1 : 0;
+const NET = CHAINS[chainIdx], DOMAIN = NET.domain, USDC = DOMAIN.verifyingContract;
+const chain = [baseSepolia, base][chainIdx];
+$('net').textContent = NET.name + ' ⇄';
+$('net').setAttribute('aria-label', `Network: ${NET.name}. Switch`);
+$('net').classList.toggle('mainnet', chainIdx === 1);
+document.querySelectorAll('.netName').forEach(e => (e.textContent = NET.name));
+$('net').onclick = () => {
+  if (chainIdx === 0 && !confirm('Switch to Base mainnet? Payments will move real USDC, and this iPhone wallet needs real ETH for gas.')) return;
+  localStorage.tcChain = chainIdx === 0 ? '1' : '0';
+  location.reload();
+};
+
 localStorage.tcKey ??= generatePrivateKey();
 const account = privateKeyToAccount(localStorage.tcKey);
-const pub = createPublicClient({ chain: baseSepolia, transport: http() });
-const wallet = createWalletClient({ account, chain: baseSepolia, transport: http() });
+const pub = createPublicClient({ chain, transport: http() });
+const wallet = createWalletClient({ account, chain, transport: http() });
 $('address').textContent = account.address;
 $('walletLine').textContent = 'iPhone wallet  ' + short(account.address);
 
@@ -217,6 +233,7 @@ async function refresh() {
 refresh().then(async eth => {
   if (eth > 0n) return (await resumeLedgerWallet()) || show('receive');
   show('setup');
+  if (chainIdx !== 0) return;  // the gas tap is testnet only
   // Gas tap: ask api/gas for a small top-up; if it isn't configured or fails, the manual screen stays
   $('setupErr').textContent = 'Adding gas automatically…';
   try {
@@ -251,7 +268,7 @@ async function tap(step) {
   const value = parseUnits(amount, 6);
   if (!pending || pending.value !== value) {
     const nonce = toHex(crypto.getRandomValues(new Uint8Array(32)));
-    pending = { value, kh: buildRequest(account.address, value, Math.floor(Date.now() / 1000) + 3600, nonce) };
+    pending = { value, kh: buildRequest(account.address, value, Math.floor(Date.now() / 1000) + 3600, nonce, chainIdx) };
   }
   $('holdText').textContent = step === 1 ? `Requesting ${amount} USDC · open TapCash on the Flex` : 'Collecting the signature from your Flex';
   $('step2').classList.toggle('on', step === 2);
@@ -269,12 +286,12 @@ async function tap(step) {
     }});
   } catch (e) {
     if (e.name === 'AbortError') return show('receive');
-    $('flexText').textContent = `${amount} USDC on Base Sepolia\nto ${short(account.address)}`;
+    $('flexText').textContent = `${amount} USDC on ${NET.name}\nto ${short(account.address)}`;
     $('approveErr').textContent = step === 2 ? 'Not approved yet. Approve on the Flex, then tap again.' : '';
     return show('approve');
   }
 
-  $('holdText').textContent = 'Sending on Base Sepolia…';
+  $('holdText').textContent = `Sending on ${NET.name}…`;
   $('cancel').hidden = true;
   try {
     const req = parseRequest(pending.kh);
@@ -288,7 +305,7 @@ async function tap(step) {
     await pub.waitForTransactionReceipt({ hash });
     $('doneAmount').textContent = `+${formatUnits(req.value, 6)} USDC`;
     $('doneFrom').textContent = 'Received from ' + short(from);
-    $('basescan').href = `https://sepolia.basescan.org/tx/${hash}`;
+    $('basescan').href = `${NET.explorer}/tx/${hash}`;
     pending = null;
     await refresh();
     show('done');
@@ -419,7 +436,7 @@ $('moveBtn').onclick = async () => {
     await pub.waitForTransactionReceipt({ hash });
     $('doneAmount').textContent = `${formatUnits(value, 6)} USDC moved`;
     $('doneFrom').textContent = 'To your Ledger ' + short(to);
-    $('basescan').href = `https://sepolia.basescan.org/tx/${hash}`;
+    $('basescan').href = `${NET.explorer}/tx/${hash}`;
     await refresh();
     show('done');
   } catch (e) {
@@ -433,11 +450,12 @@ $('cancel').onclick = () => abort?.abort();
 $('newRequest').onclick = () => { resetCard(); amount = '0'; $('amount').textContent = '0'; $('tap').disabled = true; show('receive'); };
 
 // Cash out: send the whole USDC balance to the cash-out address, then api/cashout.mjs issues an
-// Increase sandbox virtual card with that spend limit (test money, not a real card).
+// Increase sandbox virtual card with that spend limit (test money, not a real card). Testnet only:
+// on mainnet the button stays hidden, so real USDC never goes to the sandbox cash-out address.
 const api = (body) => fetch('/api/cashout', body && { method: 'POST', headers: { 'content-type': 'application/json' },
   body: JSON.stringify(body) }).then(r => r.json()).then(j => { if (j.error) throw new Error(j.error); return j; });
 let card = null, cashoutReady = false;  // button shows only where api/cashout is configured
-api().then(() => { cashoutReady = true; resetCard(); }, () => {});
+if (chainIdx === 0) api().then(() => { cashoutReady = true; resetCard(); }, () => {});
 function resetCard() {
   card = null;
   $('card').hidden = $('coffee').hidden = true;
