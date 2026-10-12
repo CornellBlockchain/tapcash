@@ -102,9 +102,9 @@ The page is static, `mvp/tapcash/web/`, with no build step. Safari only allows W
 
 ## 7. Card cash-out sandbox (`cashout-increase`)
 
-**Fastest:** use Sahas's deployment, https://tapcash-cashout.vercel.app. It is already configured, so make a payment there and tap "Cash out to card".
+**Where it runs:** the demo is hosted on the `tapcash-ruby` Vercel project, https://tapcash-ruby.vercel.app, once this branch is deployed there with the steps below. When it is configured, https://tapcash-ruby.vercel.app/api/cashout shows the cash-out address.
 
-**To run your own:**
+**Steps:**
 
 1. **Get a sandbox key.** It needs no account:
    ```sh
