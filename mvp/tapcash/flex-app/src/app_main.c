@@ -236,13 +236,21 @@ static void card_toggle(void) {
                        card_choice);
 }
 
+// Derived once and cached: card and budget mode sign while iOS waits for the tap's reply, and a
+// second key derivation per payment made iOS give up before the signature arrived.
 static bool get_address(uint8_t out[20]) {
+    static uint8_t address[20];
+    static bool cached;
     uint8_t pubkey[65], hash[32];
-    if (bip32_derive_get_pubkey_256(CX_CURVE_256K1, PATH, 5, pubkey, NULL, CX_SHA512) != CX_OK ||
-        cx_keccak_256_hash(pubkey + 1, 64, hash) != CX_OK) {
-        return false;
+    if (!cached) {
+        if (bip32_derive_get_pubkey_256(CX_CURVE_256K1, PATH, 5, pubkey, NULL, CX_SHA512) != CX_OK ||
+            cx_keccak_256_hash(pubkey + 1, 64, hash) != CX_OK) {
+            return false;
+        }
+        memcpy(address, hash + 12, 20);
+        cached = true;
     }
-    memcpy(out, hash + 12, 20);
+    memcpy(out, address, 20);
     return true;
 }
 
@@ -450,6 +458,8 @@ void app_main(void) {
     const uint8_t *data;
 
     io_init();
+    uint8_t warm[20];
+    get_address(warm);  // fill the cache now, not during the first one-tap payment
     per_tap_idx = 1;  // 5 USDC
     total_idx = 1;    // 20 USDC
     count_idx = 2;    // 10 payments
