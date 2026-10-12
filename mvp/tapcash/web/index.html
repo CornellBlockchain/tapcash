@@ -316,7 +316,7 @@ $('tapAddress').onclick = async () => {
 // Connect Ledger Wallet (WalletConnect v2): only to pick the destination address. Nothing is signed.
 // The session is prepared when the Move screen opens, so the button is a real link: Safari opens the
 // app from a direct tap more reliably than from a script after an await.
-const WC_PROJECT_ID = 'cc4b799cf01c4d44825507c74955f88a';  // Reown project ID (public); empty hides the button
+const WC_PROJECT_ID = 'dd1ed69c86e875fbde469749a73030fd';  // Reown project ID (public); empty hides the button
 const LEDGER_WALLET_LINK = 'ledgerlive://wc?uri=';  // ponytail: from memory; check the Reown wallet registry
 const mobile = /iPhone|iPad|Android/.test(navigator.userAgent);
 let wc = null, wcPending = null;
