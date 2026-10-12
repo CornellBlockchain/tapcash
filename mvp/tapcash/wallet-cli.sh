@@ -14,15 +14,17 @@
 set -euo pipefail
 W=${WALLET_CLI:-wallet-cli}
 TICKER=${TICKER:-tUSDC}
-: "${TAPCASH_ACCOUNT:?set TAPCASH_ACCOUNT to the Flex label from: wallet-cli session view}"
 dry=--dry-run
 [ "${LIVE:-}" = 1 ] && dry=
 
 case "${1:-}" in
+  balance|topup|out) : "${TAPCASH_ACCOUNT:?set TAPCASH_ACCOUNT to the Flex label from: wallet-cli session view}" ;;
+  *) sed -n '2,13p' "$0" >&2; exit 2 ;;
+esac
+case "$1" in
   balance) $W balances "$TAPCASH_ACCOUNT" ;;
   topup)   [ $# -eq 3 ] || { echo "usage: $0 topup <from-label> <amount>" >&2; exit 2; }
            $W send "$2" --to "${TAPCASH_ADDRESS:?set TAPCASH_ADDRESS}" --amount "$3 $TICKER" $dry ;;
   out)     [ $# -eq 3 ] || { echo "usage: $0 out <to-address> <amount>" >&2; exit 2; }
            $W send "$TAPCASH_ACCOUNT" --to "$2" --amount "$3 $TICKER" $dry ;;
-  *)       sed -n '2,13p' "$0" >&2; exit 2 ;;
 esac

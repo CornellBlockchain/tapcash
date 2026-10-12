@@ -156,11 +156,11 @@ So the commands below may work on Base Sepolia, but Ledger doesn't promise it. A
 ```sh
 npm i -g @ledgerhq/wallet-cli          # or prefix each command with: npx -y @ledgerhq/wallet-cli
 wallet-cli account discover base:sepolia   # Flex on USB, unlocked; opens the Ethereum app
-wallet-cli session view                    # prints the labels; the first Base Sepolia one is the TapCash address
-wallet-cli receive <label>                 # shows the address on the Flex screen; compare it with the page
+wallet-cli session view                    # prints the labels
+wallet-cli receive <label>                 # shows that label's address on the Flex screen
 ```
 
-The labels look like `<network>-<n>`, but use the exact ones `session view` prints.
+Run `receive` on each Base Sepolia label. The TapCash label is the one whose address matches the Flex address TapCash pays from. Use the exact labels `session view` prints.
 
 **Check the balance** (no device needed):
 
