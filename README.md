@@ -13,9 +13,9 @@ Built for the Ledger N3XT Hackathon @ OP3N 2026.
 
 ## Why
 
-Hardware wallets are the safest place to keep crypto, and the most awkward place to spend it from. Paying someone in person usually means a laptop, a cable, or a phone app paired over Bluetooth, plus copying addresses around.
+Hardware wallets are treated as signers: something a computer or phone app asks to approve a transaction it built. The wallet app does the paying, and the Ledger only says yes or no.
 
-TapCash makes it feel like tapping a card. The receiver opens a web page, the payer taps their Ledger, checks the screen, and taps again. No app store, no pairing, no address copying, and the signing key never leaves the Ledger's secure chip.
+TapCash makes the Ledger the thing that pays. Like a card, you tap it at the point of sale: the Flex receives the payment request, shows it, signs it, and hands the payment over. There's no wallet app or computer on the payer's side. The payer only needs their Ledger, and the key never leaves its secure chip.
 
 ## How a payment works
 
