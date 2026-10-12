@@ -98,7 +98,9 @@ The page is static, `mvp/tapcash/web/`, with no build step. Safari only allows W
 
 **Before the first real payment:**
 - **Fund the Flex:** send Base Sepolia USDC to the Flex's address from https://faucet.circle.com (choose USDC, then Base Sepolia).
-- **Fund the iPhone wallet:** send about 0.001 Base Sepolia ETH to the address the page shows. It pays the gas.
+- **Fund the iPhone wallet:** send about 0.0002 Base Sepolia ETH to the address the page shows. It pays the gas.
+- **Or top up gas automatically:** set `GAS_FUNDER_KEY` (Base Sepolia) and/or `GAS_FUNDER_KEY_MAINNET` (Base) with `vercel env add`, fund those wallets, and redeploy. Keep only a few dollars in the mainnet one.
+- **For mainnet,** switch the network on the page and use real USDC and ETH on Base.
 
 ## 7. Card cash-out sandbox (`cashout-increase`)
 

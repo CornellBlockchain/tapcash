@@ -1,27 +1,30 @@
-# TapCash: your Ledger as a tap-to-pay wallet
+# TapCash
 
-Tap a Ledger Flex to an iPhone, approve on the Flex screen, tap again, and USDC moves on Base Sepolia.
-- The receiver needs no app: Safari is enough.
-- The payer needs no ETH for gas.
-- The key never leaves the secure element, and the Flex shows exactly what it signs.
+Tap your Ledger Flex to an iPhone, approve on the Flex, tap again, and USDC moves on Base.
 
-**Works on real hardware.** Live page: https://tapcash-ruby.vercel.app
+- **Nothing to install on the iPhone.** It runs in Safari.
+- **The payer needs no ETH.** The receiver's phone pays the gas.
+- **Your key stays on the Ledger.** The Flex shows the amount, the chain and the receiver before it signs.
+- **Base mainnet or Base Sepolia,** picked on the page.
+
+Live page: https://tapcash-ruby.vercel.app. It works on a real Flex.
 
 Built for the Ledger N3XT Hackathon @ OP3N 2026.
 
-## How it works
+## How a payment works
 
-1. The iPhone page asks for a payment by tapping the Flex. The request travels over NFC through Safari's security-key support (WebAuthn), so no iOS app or paid Apple account is needed.
-2. The Flex shows "Send payment? 5 USDC on Base Sepolia to 0x…".
-3. On Approve, the Flex itself signs a USDC `transferWithAuthorization` (EIP-3009).
-4. On the second tap, the page checks the signature and submits it, paying the gas.
+1. The receiver types an amount on the iPhone and holds it near the Flex.
+2. The Flex shows "Send payment? 5 USDC on Base to 0x…". The payer approves.
+3. The payer taps again. The Flex hands over a signed USDC transfer, and the phone sends it.
 
-Details, wire format, commands and limits: [`mvp/tapcash/README.md`](mvp/tapcash/README.md).
-
-## Repo
+## Where things are
 
 | Path | What |
 | --- | --- |
-| `mvp/tapcash/flex-app/` | Ledger Flex app (C, Ledger secure SDK) |
-| `mvp/tapcash/web/` | The iPhone page (static, no build) |
-| `mvp/tapcash/test.mjs` | End-to-end check on Speculos, including an on-chain simulation |
+| `mvp/tapcash/flex-app/` | The Ledger Flex app |
+| `mvp/tapcash/web/` | The iPhone page and its two small APIs (gas top-up, card cash-out) |
+| `mvp/tapcash/web/site/` | The product website |
+| `mvp/tapcash/test*.mjs` | Tests on the Ledger emulator |
+
+How it works under the hood, and the payment modes: [`mvp/tapcash/README.md`](mvp/tapcash/README.md).
+Building and running it yourself: [`SETUP.md`](SETUP.md).
