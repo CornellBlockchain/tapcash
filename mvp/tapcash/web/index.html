@@ -334,7 +334,7 @@ const mobile = /iPhone|iPad|Android/.test(navigator.userAgent);
 let wc = null, wcPending = null;  // wcPending: { known: session topics that existed before this connect }
 const ensureWc = async () => wc ??= await (await import('https://esm.sh/@walletconnect/sign-client@2.26.0')).SignClient.init({
   projectId: WC_PROJECT_ID, metadata: { name: 'TapCash', description: 'Move USDC to your Ledger', url: location.origin,
-    icons: [location.origin + '/icon.png'], redirect: { universal: location.origin } } });
+    icons: [location.origin + '/icon.png'] } });  // no `redirect`: Ledger Wallet window.open()s it, which loads a fresh page instead of returning to this tab
 async function prepareLedgerWallet() {
   if (!WC_PROJECT_ID) return;
   if (mobile) {
@@ -358,7 +358,9 @@ async function prepareLedgerWallet() {
       $('wcQrImg').src = await QRCode.toDataURL(uri, { margin: 1, width: 360 });
       $('wcQr').hidden = false;
     }
-    approval().then(useLedgerWalletSession, () => {});
+    approval().then(useLedgerWalletSession, e => {
+      if (wcPending) $('moveErr').textContent = 'Ledger Wallet: ' + (e?.message || 'connection not approved');
+    });
   } catch (e) {
     $('wcLink').hidden = true;
     $('moveErr').textContent = 'Ledger Wallet connect unavailable: ' + (e.message || e);
@@ -385,7 +387,7 @@ async function collectApproval() {
     if (fresh) return useLedgerWalletSession(fresh);
     await new Promise(ok => setTimeout(ok, 500));
   }
-  if (wcPending) $('moveHint').textContent = "No approval yet. Approve in Ledger Wallet, or tap Connect again.";
+  if (wcPending) $('moveHint').textContent = 'No approval yet. Approve in Ledger Wallet, then come back to this tab.';
 }
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'visible' && wc && wcPending) collectApproval();
