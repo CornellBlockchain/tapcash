@@ -61,6 +61,10 @@
   .vcard-bottom { display: flex; align-items: flex-end; justify-content: space-between; }
   .vcard-num { font: 400 20px ui-monospace, Menlo, monospace; letter-spacing: 2px; color: #C9CCD3; }
   .vcard-bottom i { font: italic 800 28px Inter, sans-serif; letter-spacing: -1px; }
+  a.btn { display: flex; align-items: center; justify-content: center; text-decoration: none; }
+  .wc-qr { align-self: center; display: flex; flex-direction: column; align-items: center; gap: 6px; }
+  .wc-qr img { width: 180px; height: 180px; image-rendering: pixelated; }
+  .wc-qr[hidden] { display: none; }
   .big { margin: 0; font-size: 44px; font-weight: 700; color: var(--ink); }
   a { color: var(--ink); font-size: 15px; font-weight: 600; }
 </style>
@@ -146,6 +150,8 @@
   <h2>Move to your Ledger</h2>
   <p id="moveHint">Tap your Ledger to fill in its address, or paste one.</p>
   <div class="addr"><input id="dest" placeholder="0x…" autocomplete="off" autocapitalize="off" spellcheck="false"><button id="tapAddress">Tap</button></div>
+  <a class="btn secondary" id="wcLink" hidden>Connect Ledger Wallet</a>
+  <div class="wc-qr" id="wcQr" hidden><img id="wcQrImg" alt="WalletConnect QR code"><p>Scan with the Ledger Wallet app</p></div>
   <p class="err" id="moveErr"></p>
   <div class="grow"></div>
   <button class="btn" id="moveBtn" disabled>Move USDC</button>
@@ -186,7 +192,7 @@ const art = (size, fg, ac, bg) => `<svg width="${size}" height="${size}" viewBox
     .map(([cx, cy, a0, a1]) => arc(cx, cy, 58, a0, a1) + arc(cx, cy, 88, a0 + 8, a1 - 8)).join('') + `"/></g></svg>`;
 $('holdArt').innerHTML = art(200, '#0E0E10', '#7FB800');
 $('setupArt').innerHTML = art(120, '#fff', '#C6FF3D', '#0E0E10');
-$('moveArt').innerHTML = art(140, '#0E0E10', '#7FB800');
+$('moveArt').innerHTML = art(110, '#0E0E10', '#7FB800');
 
 localStorage.tcKey ??= generatePrivateKey();
 const account = privateKeyToAccount(localStorage.tcKey);
@@ -287,8 +293,8 @@ $('dest').oninput = () => {
   $('moveErr').textContent = $('dest').value.trim() && !destination() ? "That's not a valid address." : '';
   moveReady();
 };
-$('toMove').onclick = $('doneMove').onclick = () => { moveReady(); show('move'); };
-$('moveBack').onclick = () => show('receive');
+$('toMove').onclick = $('doneMove').onclick = () => { moveReady(); show('move'); prepareLedgerWallet(); };
+$('moveBack').onclick = () => { $('wcLink').hidden = $('wcQr').hidden = true; wcPending = null; show('receive'); };
 $('tapAddress').onclick = async () => {
   $('moveErr').textContent = '';
   try {
@@ -305,6 +311,56 @@ $('tapAddress').onclick = async () => {
   }
   moveReady();
 };
+// Connect Ledger Wallet (WalletConnect v2): only to pick the destination address. Nothing is signed.
+// The session is prepared when the Move screen opens, so the button is a real link: Safari opens the
+// app from a direct tap more reliably than from a script after an await.
+const WC_PROJECT_ID = '';  // Reown project ID (dashboard.reown.com); empty hides the button
+const LEDGER_WALLET_LINK = 'ledgerlive://wc?uri=';  // ponytail: from memory; check the Reown wallet registry
+const mobile = /iPhone|iPad|Android/.test(navigator.userAgent);
+let wc = null, wcPending = null;
+async function prepareLedgerWallet() {
+  if (!WC_PROJECT_ID) return;
+  try {
+    if (!wc) {
+      const { SignClient } = await import('https://esm.sh/@walletconnect/sign-client@2.26.0');
+      wc = await SignClient.init({ projectId: WC_PROJECT_ID, metadata: {
+        name: 'TapCash', description: 'Move USDC to your Ledger', url: location.origin,
+        icons: [location.origin + '/icon.png'], redirect: { universal: location.href } } });
+    }
+    const since = Date.now();
+    const { uri, approval } = await wc.connect({ optionalNamespaces: { eip155: {
+      chains: ['eip155:1', 'eip155:8453'], methods: ['personal_sign'], events: ['accountsChanged', 'chainChanged'] } } });
+    wcPending = { since };
+    if (mobile) {
+      $('wcLink').href = LEDGER_WALLET_LINK + encodeURIComponent(uri);
+      $('wcLink').hidden = false;
+    } else {
+      const QRCode = (await import('https://esm.sh/qrcode@1.5.4')).default;
+      $('wcQrImg').src = await QRCode.toDataURL(uri, { margin: 1, width: 360 });
+      $('wcQr').hidden = false;
+    }
+    approval().then(useLedgerWalletSession, () => {});
+  } catch (e) {
+    $('moveErr').textContent = 'Ledger Wallet connect unavailable: ' + (e.message || e);
+  }
+}
+async function useLedgerWalletSession(session) {
+  if (!wcPending || !session) return;
+  wcPending = null;
+  const account = session.namespaces.eip155?.accounts?.[0];  // "eip155:<chain>:<address>"
+  $('dest').value = account ? account.split(':')[2] : '';
+  $('dest').oninput();
+  $('moveHint').textContent = 'Filled in from your Ledger Wallet account. Check it, then move.';
+  $('wcLink').hidden = $('wcQr').hidden = true;
+  wc.disconnect({ topic: session.topic, reason: { code: 6000, message: 'Address received' } }).catch(() => {});
+}
+// Safari may suspend the page while the user approves in Ledger Wallet: re-check on return
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState !== 'visible' || !wc || !wcPending) return;
+  const fresh = wc.session.getAll().filter(s => s.expiry * 1000 > wcPending.since).at(-1);
+  if (fresh) useLedgerWalletSession(fresh);
+});
+
 $('moveBtn').onclick = async () => {
   const to = destination(), value = balance;
   $('moveBtn').disabled = true;
