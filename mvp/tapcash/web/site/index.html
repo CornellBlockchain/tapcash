@@ -1,0 +1,227 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>TapCash: tap your Ledger, pay in USDC</title>
+<meta name="description" content="Tap a Ledger Flex to an iPhone, approve on the Flex, and USDC moves on Base. The receiver needs only Safari; the payer needs no ETH.">
+<link rel="icon" href="/icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap">
+<style>
+  :root { --ink: #0E0E10; --muted: #6B6B70; --soft: #F3F3F1; --line: #E4E4E1; --lime: #C6FF3D; --lime-dark: #7FB800; }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: Inter, -apple-system, system-ui, sans-serif; color: var(--ink); background: #fff; line-height: 1.4; }
+  img { display: block; max-width: 100%; height: auto; }
+  .wrap { max-width: 1080px; margin: 0 auto; padding-inline: 20px; }
+  h1, h2, h3, p { margin: 0; }
+  h1 { font-size: clamp(40px, 7vw, 64px); font-weight: 700; line-height: 1.05; letter-spacing: -1.5px; }
+  h2 { font-size: clamp(28px, 4vw, 36px); font-weight: 600; line-height: 1.15; letter-spacing: -.5px; }
+  h3 { font-size: 19px; font-weight: 600; }
+  p { font-size: 16px; color: var(--muted); }
+  a { color: var(--ink); font-weight: 600; }
+  code { font: 500 .9em ui-monospace, Menlo, monospace; }
+
+  /* App pieces, copied from the iPhone page */
+  .pill { display: inline-block; background: var(--soft); color: var(--muted); font-size: 12px; font-weight: 500; border-radius: 999px; padding: 5px 10px; }
+  .btn { display: inline-flex; align-items: center; justify-content: center; height: 56px; padding: 0 28px; border-radius: 999px; border: 2px solid var(--ink); background: var(--ink); color: #fff; font-size: 17px; font-weight: 600; text-decoration: none; }
+  .btn.secondary { background: #fff; color: var(--ink); }
+  .chip { background: var(--soft); border-radius: 16px; padding: 20px; }
+  .dot::before { content: ""; display: inline-block; width: 10px; height: 10px; margin-right: 10px; border-radius: 50%; background: var(--lime-dark); }
+
+  /* Device frames */
+  .phone { width: 100%; max-width: 250px; margin: 0 auto; border: 8px solid var(--ink); border-radius: 40px; overflow: hidden; background: #fff; }
+  .flex { width: 100%; max-width: 220px; aspect-ratio: 4 / 5; margin: 0 auto; border: 6px solid var(--ink); border-radius: 28px; overflow: hidden; background: #fff; padding: 10px; }
+  .flex img { width: 100%; height: 100%; object-fit: contain; }
+  .flex.mock { display: flex; flex-direction: column; justify-content: center; gap: 10px; padding: 18px; text-align: center; }
+  .flex.mock b { font-size: 16px; }
+  .flex.mock small { font-size: 12px; color: var(--muted); }
+  .flex.mock .approve { background: var(--ink); color: #fff; border-radius: 999px; padding: 9px; font-size: 13px; font-weight: 600; }
+  .flex.mock .reject { font-size: 12px; font-weight: 600; }
+
+  header { display: flex; align-items: center; gap: 10px; padding-top: 20px; padding-bottom: 20px; }
+  header b { font-size: 20px; }
+  header .pill { margin-left: auto; }
+
+  section { padding: 64px 0; }
+  section + section { border-top: 1px solid var(--line); }
+  .lead { margin-top: 12px; max-width: 620px; }
+
+  .hero { display: grid; gap: 48px; align-items: center; padding-top: 32px; }
+  .hero p { margin-top: 20px; font-size: 18px; max-width: 520px; }
+  .actions { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 32px; }
+  .hero .note { margin-top: 16px; font-size: 14px; }
+  .halo { position: relative; display: grid; place-items: center; padding: 32px 0; }
+  .halo::before { content: ""; position: absolute; width: min(400px, 100%); aspect-ratio: 1; border-radius: 50%; background: rgb(198 255 61 / .25); }
+  .halo .phone { position: relative; }
+
+  .grid { display: grid; gap: 16px; margin-top: 40px; }
+  .steps { grid-template-columns: repeat(2, 1fr); gap: 32px 16px; }
+  .steps li { list-style: none; display: flex; flex-direction: column; gap: 10px; }
+  .steps .phone { border-width: 6px; border-radius: 30px; margin-bottom: 10px; }
+  .steps { padding: 0; }
+  .num { display: inline-grid; place-items: center; width: 28px; height: 28px; border-radius: 50%; background: var(--lime); font-size: 14px; font-weight: 700; }
+  .steps h3 { display: flex; flex-direction: column; align-items: flex-start; gap: 10px; }
+  .steps p { font-size: 15px; }
+
+  .modes .chip { display: flex; flex-direction: column; gap: 10px; padding: 24px; }
+  .modes .flex { margin-bottom: 14px; }
+  .modes .pill { align-self: flex-start; background: #fff; }
+
+  .who { margin-top: 16px; }
+  .who dl { margin: 12px 0 0; display: grid; gap: 12px; }
+  .who dt { font-weight: 600; }
+  .who dd { margin: 2px 0 0; color: var(--muted); }
+
+  .cash { display: grid; gap: 40px; align-items: center; }
+  .cash p + p { margin-top: 12px; }
+  .cash .pill { margin-bottom: 16px; background: var(--lime); color: var(--ink); font-weight: 600; }
+  .vcard { width: 100%; max-width: 400px; margin: 0 auto; aspect-ratio: 1.586; display: flex; flex-direction: column; justify-content: space-between; padding: 22px 24px; border-radius: 22px; color: #fff;
+    background: repeating-linear-gradient(115deg, rgb(255 255 255 / .025) 0 2px, transparent 2px 7px),
+      linear-gradient(115deg, #000 0%, #141416 50%, #000 100%);
+    box-shadow: 0 18px 40px rgb(0 0 0 / .25), inset 0 0 0 1px rgb(255 255 255 / .08); }
+  .vcard-top { display: flex; align-items: center; gap: 8px; }
+  .vcard-top b { flex: 1; font-size: 18px; font-weight: 500; }
+  .vcard-top small { font-size: 11px; font-weight: 600; letter-spacing: 1px; color: #C9CCD3; }
+  .vcard-bottom { display: flex; align-items: flex-end; justify-content: space-between; }
+  .vcard-num { font: 400 clamp(16px, 4.5vw, 20px) ui-monospace, Menlo, monospace; letter-spacing: 2px; color: #C9CCD3; }
+  .vcard-bottom i { font: italic 800 28px Inter, sans-serif; letter-spacing: -1px; }
+
+  .security .chip p, .tools .chip p { margin-top: 8px; font-size: 15px; }
+
+  footer { border-top: 1px solid var(--line); padding: 32px 0 48px; }
+  footer p { font-size: 14px; }
+
+  @media (max-width: 479px) { .actions .btn { flex: 1 1 100%; } }
+  @media (min-width: 800px) {
+    .hero { grid-template-columns: 1.15fr .85fr; padding-top: 48px; }
+    section { padding: 88px 0; }
+    .steps { grid-template-columns: repeat(4, 1fr); }
+    .modes { grid-template-columns: repeat(3, 1fr); }
+    .security, .tools { grid-template-columns: repeat(2, 1fr); }
+    .cash { grid-template-columns: 1fr 1fr; }
+  }
+</style>
+
+<header class="wrap">
+  <svg viewBox="0 0 512 512" width="32" height="32" aria-hidden="true"><rect width="512" height="512" rx="112" fill="#0E0E10"/><g transform="rotate(-12 256 256)" fill="none" stroke-width="26" stroke-linecap="round"><rect x="176" y="136" width="160" height="240" rx="30" stroke="#fff"/><rect x="204" y="292" width="104" height="56" rx="12" stroke="#fff" stroke-width="20"/><path d="M319 99A66 66 0 0 1 373 153M341 61A108 108 0 0 1 411 131M193 413A66 66 0 0 1 139 359M171 451A108 108 0 0 1 101 381" stroke="#C6FF3D"/></g></svg>
+  <b>TapCash</b>
+  <span class="pill">Base Sepolia</span>
+</header>
+
+<main>
+  <section class="wrap hero">
+    <div>
+      <h1>Tap your Ledger. Pay&nbsp;in&nbsp;USDC.</h1>
+      <p>Hold a Ledger Flex to an iPhone, approve on the Flex, and USDC moves on Base. The receiver needs only Safari, the payer needs no ETH, and the key never leaves the secure element.</p>
+      <div class="actions">
+        <a class="btn" href="/">Open the app</a>
+        <a class="btn secondary" href="https://github.com/Sahas266/ledger-op3n-n3xt-hackathon-26">View on GitHub</a>
+      </div>
+      <p class="note">Works on a real Ledger Flex today, on the Base Sepolia testnet.</p>
+    </div>
+    <div class="halo">
+      <div class="phone"><img src="iphone-request.webp" width="520" height="1125" alt="TapCash on iPhone: a request for 5 USDC with a Tap Ledger button"></div>
+    </div>
+  </section>
+
+  <section class="wrap" aria-labelledby="how">
+    <h2 id="how">How it works</h2>
+    <p class="lead">Four steps, two taps. No app to install on either side.</p>
+    <ol class="grid steps">
+      <li>
+        <div class="phone"><img src="iphone-request.webp" width="520" height="1125" loading="lazy" alt="iPhone keypad with 5 USDC entered"></div>
+        <h3><span class="num">1</span>Enter the amount</h3>
+        <p>The receiver types the amount on the iPhone page in Safari.</p>
+      </li>
+      <li>
+        <div class="phone"><img src="iphone-hold.webp" width="520" height="1125" loading="lazy" alt="iPhone screen: Hold your iPhone near the Ledger"></div>
+        <h3><span class="num">2</span>Tap the Flex</h3>
+        <p>Hold the iPhone near the Ledger Flex. The request travels over NFC.</p>
+      </li>
+      <li>
+        <div class="phone"><img src="iphone-approve.webp" width="520" height="1125" loading="lazy" alt="iPhone screen: Approve on your Ledger, showing 5 USDC on Base Sepolia"></div>
+        <h3><span class="num">3</span>Check and approve</h3>
+        <p>The Flex shows the amount and recipient. Approve on the Flex, then tap again.</p>
+      </li>
+      <li>
+        <div class="phone"><img src="iphone-done.webp" width="520" height="1125" loading="lazy" alt="iPhone screen: plus 5 USDC received, with a Basescan link and a Move to my Ledger button"></div>
+        <h3><span class="num">4</span>USDC arrives</h3>
+        <p>The iPhone checks the signature, pays the gas, and the USDC lands. Move it to your Ledger whenever you like.</p>
+      </li>
+    </ol>
+  </section>
+
+  <section class="wrap" aria-labelledby="modes">
+    <h2 id="modes">Three ways to pay</h2>
+    <p class="lead">You choose how much the Flex does on its own. Every mode is set on the Flex itself.</p>
+    <div class="grid modes">
+      <article class="chip">
+        <div class="flex mock" role="img" aria-label="Flex screen: Send payment? 5 USDC on Base Sepolia, with Approve and Reject">
+          <b>Send payment?</b><small>5 USDC on Base Sepolia<br>to 0x1033…0a28</small><span class="approve">Approve</span><span class="reject">Reject</span>
+        </div>
+        <span class="pill">Default</span>
+        <h3>Manual</h3>
+        <p>Two taps. Every payment is reviewed and approved on the Flex.</p>
+      </article>
+      <article class="chip">
+        <div class="flex"><img src="flex-budget-on.webp" width="480" height="600" loading="lazy" alt="Flex screen: Budget mode, 20 USDC left for 10 more payments"></div>
+        <span class="pill">Spending limits</span>
+        <h3>Budget</h3>
+        <p>Set limits on the Flex: per payment, in total, and number of payments. Payments within them go on one tap. Anything over falls back to manual.</p>
+      </article>
+      <article class="chip">
+        <div class="flex"><img src="flex-card-on.webp" width="480" height="600" loading="lazy" alt="Flex screen: Card mode is on for 1 minute, the next tap pays"></div>
+        <span class="pill">One uncapped transaction</span>
+        <h3>Card</h3>
+        <p>Turn it on right before you pay. The next tap pays any amount, then it turns off after that payment or after one minute.</p>
+      </article>
+    </div>
+  </section>
+
+  <section class="wrap" aria-labelledby="security">
+    <h2 id="security">Security</h2>
+    <p class="lead">The Flex holds the key and decides what gets signed. The iPhone only asks.</p>
+    <div class="grid security">
+      <div class="chip"><h3 class="dot">Keys stay on the Flex</h3><p>The signing key lives in the Flex's secure element and never leaves it.</p></div>
+      <div class="chip"><h3 class="dot">You see what you sign</h3><p>The Flex shows the amount and recipient, and builds the message it signs itself. It never signs a hash from the phone.</p></div>
+      <div class="chip"><h3 class="dot">Pinned to one token</h3><p>Each signature is an EIP-3009 <code>transferWithAuthorization</code> for USDC on Base Sepolia, so it can't be replayed on another chain.</p></div>
+      <div class="chip"><h3 class="dot">One approval, one payment</h3><p>Each approval yields exactly one signature. The payer pays no gas.</p></div>
+    </div>
+    <div class="chip who">
+      <h3>Where the human decides</h3>
+      <dl>
+        <div><dt>Manual</dt><dd>You approve every payment on the Flex.</dd></div>
+        <div><dt>Budget</dt><dd>You approve the limits once. At most what's left of the budget can go without review.</dd></div>
+        <div><dt>Card</dt><dd>You approve one payment of any amount, for up to one minute. Turn it on only at the moment you pay.</dd></div>
+      </dl>
+    </div>
+  </section>
+
+  <section class="wrap cash" aria-labelledby="cash">
+    <div>
+      <span class="pill">Sandbox: test money</span>
+      <h2 id="cash">Cash out to a card</h2>
+      <p class="lead">Received USDC can become a virtual Visa card. TapCash sends the USDC to a cash-out address, reads the amount from the on-chain receipt, and issues a card with that spend limit.</p>
+      <p>Today this runs in the Increase sandbox, with a test card and test money. In production the same step would go through a card issuer.</p>
+    </div>
+    <div class="vcard" role="img" aria-label="Sandbox virtual Visa card ending in 4142">
+      <div class="vcard-top">
+        <svg viewBox="0 0 512 512" width="32" height="32" aria-hidden="true"><rect width="512" height="512" rx="112" fill="#0E0E10"/><g transform="rotate(-12 256 256)" fill="none" stroke-width="26" stroke-linecap="round"><rect x="176" y="136" width="160" height="240" rx="30" stroke="#fff"/><rect x="204" y="292" width="104" height="56" rx="12" stroke="#fff" stroke-width="20"/><path d="M319 99A66 66 0 0 1 373 153M341 61A108 108 0 0 1 411 131M193 413A66 66 0 0 1 139 359M171 451A108 108 0 0 1 101 381" stroke="#C6FF3D"/></g></svg>
+        <b>TapCash</b><small>SANDBOX</small>
+      </div>
+      <div class="vcard-bottom"><span class="vcard-num">•••• 4142</span><i>VISA</i></div>
+    </div>
+  </section>
+
+  <section class="wrap" aria-labelledby="tools">
+    <h2 id="tools">Built with Ledger tools</h2>
+    <div class="grid tools">
+      <div class="chip"><h3>Ledger signer</h3><p>A custom TapCash app for the Ledger Flex, written in C with the Ledger secure SDK.</p></div>
+      <div class="chip"><h3>Ledger Wallet</h3><p>Move received USDC off the iPhone to your Ledger. Tap the Flex to fill in its address, or connect the Ledger Wallet app over WalletConnect. Nothing is signed there.</p></div>
+    </div>
+  </section>
+</main>
+
+<footer class="wrap">
+  <p>Built for the Ledger N3XT Hackathon @ OP3N 2026 by Cornell Blockchain. <a href="https://github.com/Sahas266/ledger-op3n-n3xt-hackathon-26">GitHub</a></p>
+</footer>
