@@ -48,17 +48,23 @@
   .addr button { background: none; border: 0; color: var(--lime-dark); font-size: 15px; font-weight: 600; }
   .chip .link { margin-left: auto; background: none; border: 0; color: var(--lime-dark); font-size: 15px; font-weight: 600; }
   .addr input { flex: 1; min-width: 0; border: 0; background: none; font: inherit; color: var(--ink); outline: none; }
-  .vcard { align-self: stretch; aspect-ratio: 1.586; display: flex; flex-direction: column; justify-content: space-between; padding: 20px; border-radius: 20px; text-align: left; color: #fff; cursor: pointer;
-    background: radial-gradient(circle at 88% 12%, rgb(198 255 61 / .35), transparent 45%), var(--ink); }
+  .vcard { align-self: stretch; aspect-ratio: 1.586; display: flex; flex-direction: column; justify-content: space-between; padding: 22px 24px; border-radius: 22px; text-align: left; color: #fff; cursor: pointer;
+    background: repeating-linear-gradient(115deg, rgb(255 255 255 / .035) 0 2px, transparent 2px 7px),
+      radial-gradient(circle at 85% 10%, rgb(198 255 61 / .28), transparent 45%),
+      linear-gradient(115deg, #0E0E10 0%, #2A2D33 50%, #0E0E10 100%);
+    box-shadow: 0 18px 40px rgb(0 0 0 / .25), inset 0 0 0 1px rgb(255 255 255 / .08); }
   .vcard[hidden] { display: none; }
   .vcard-top { display: flex; align-items: center; gap: 8px; }
-  .vcard-top b { flex: 1; font-size: 16px; }
-  .vcard-top span { background: var(--lime); color: var(--ink); border-radius: 999px; padding: 3px 8px; font-size: 11px; font-weight: 600; }
-  .vcard-num { font: 600 22px ui-monospace, Menlo, monospace; letter-spacing: 1px; }
-  .vcard-bottom { display: flex; align-items: flex-end; gap: 24px; }
-  .vcard-bottom small { display: block; font-size: 10px; letter-spacing: .5px; color: #9A9AA0; }
-  .vcard-bottom b { font: 600 15px ui-monospace, Menlo, monospace; }
-  .vcard-bottom i { margin-left: auto; font: italic 800 26px Inter, sans-serif; letter-spacing: -1px; }
+  .vcard-top b { flex: 1; font-size: 18px; font-weight: 500; }
+  .vcard-chip { width: 48px; height: 36px; border-radius: 7px; box-shadow: inset 0 0 0 1px rgb(0 0 0 / .2);
+    background: linear-gradient(90deg, transparent 30%, rgb(0 0 0 / .22) 30% 32%, transparent 32% 68%, rgb(0 0 0 / .22) 68% 70%, transparent 70%),
+      linear-gradient(0deg, transparent 46%, rgb(0 0 0 / .22) 46% 54%, transparent 54%), linear-gradient(135deg, #F2F2F2, #A9A9A9); }
+  .vcard-details { display: flex; gap: 20px; font: 500 13px ui-monospace, Menlo, monospace; color: #C9CCD3; }
+  .vcard-details[hidden] { display: none; }
+  .vcard-details small { font: 500 10px Inter, sans-serif; letter-spacing: .5px; color: #8E9198; margin-right: 6px; }
+  .vcard-bottom { display: flex; align-items: flex-end; justify-content: space-between; }
+  .vcard-num { font: 400 20px ui-monospace, Menlo, monospace; letter-spacing: 2px; color: #C9CCD3; }
+  .vcard-bottom i { font: italic 800 28px Inter, sans-serif; letter-spacing: -1px; }
   .big { margin: 0; font-size: 44px; font-weight: 700; color: var(--ink); }
   a { color: var(--ink); font-size: 15px; font-weight: 600; }
 </style>
@@ -126,9 +132,10 @@
   <div class="chip" id="doneWallet"><div><small>iPhone wallet balance</small><strong class="usdc"></strong></div></div>
   <button class="btn secondary" id="doneMove">Move to my Ledger</button>
   <div class="vcard" id="card" hidden>
-    <div class="vcard-top"><b>TapCash</b><span>SANDBOX</span></div>
-    <div class="vcard-num" id="cardNumber"></div>
-    <div class="vcard-bottom"><div><small>VALID THRU</small><b id="cardExp"></b></div><div><small>CVC</small><b id="cardCvc"></b></div><i>VISA</i></div>
+    <div class="vcard-top"><b>TapCash</b><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#C9CCD3" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M8 8.5a5 5 0 0 1 0 7M12 6a9 9 0 0 1 0 12M16 3.5a13 13 0 0 1 0 17"/></svg></div>
+    <div class="vcard-chip"></div>
+    <div class="vcard-details" id="cardDetails" hidden><span><small>VALID THRU</small><b id="cardExp"></b></span><span><small>CVC</small><b id="cardCvc"></b></span></div>
+    <div class="vcard-bottom"><span class="vcard-num" id="cardNumber"></span><i>VISA</i></div>
   </div>
   <p id="cardLimit"></p>
   <p class="err" id="cashErr"></p>
@@ -367,9 +374,10 @@ $('cashout').onclick = async () => {
 };
 // Sandbox card view: tap to show the full number and CVC (fine for test cards only)
 function showCard(reveal) {
-  $('cardNumber').textContent = reveal ? card.number.replace(/(\d{4})(?=\d)/g, '$1 ') : `•••• •••• •••• ${card.last4}`;
+  $('cardNumber').textContent = reveal ? card.number.replace(/(\d{4})(?=\d)/g, '$1 ') : `•••• ${card.last4}`;
   $('cardExp').textContent = card.exp;
-  $('cardCvc').textContent = reveal ? card.cvc : '•••';
+  $('cardCvc').textContent = card.cvc;
+  $('cardDetails').hidden = !reveal;
   $('cardLimit').textContent = `$${(card.cents / 100).toFixed(2)} to spend · tap the card to ${reveal ? 'hide' : 'show'} details`;
   $('card').dataset.reveal = reveal ? '1' : '';
 }
