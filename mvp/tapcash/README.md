@@ -98,9 +98,23 @@ After a payment, "Cash out to card" sends the iPhone wallet's USDC to a cash-out
 - **`format_fpu64` bug.** In the SDK it doesn't NUL-terminate amounts of 1 or more. That put stack garbage on the review screen until the buffer was zero-initialised.
 - **Public Speculos seed.** The default Speculos seed's first address has an EIP-7702 delegation on Base Sepolia, so USDC verifies its signatures via ERC-1271 and rejects them. `test.mjs` uses its own seed.
 
+## Private receiving
+
+Each payment request goes to a fresh address, so your receipts aren't linkable through a shared receiving address.
+- **Addresses:** request `i` is paid to child key `i` = `keccak256(tcKey ‖ uint32(i))`, derived from the burner key (`childKey` in `web/tapcash.js`). The next index is kept in `localStorage.tcNext` and advances once the Flex has signed for that address, so an address is never reused.
+- **Existing wallets keep working:** the old burner address stays in the wallet as one more holding address, with its USDC, and still pays gas. New payments go to child addresses only.
+- **Balance** is the sum of USDC over the burner and every child used so far, read in one Multicall3 call.
+- **Moving and cashing out:** each address holding USDC signs its own `transferWithAuthorization`, so children never need ETH. All of them go in one transaction (Multicall3 `aggregate3` when there are several), so `api/cashout.mjs` still reads the whole amount from one receipt.
+- **Optional shared relayer:** `web/api/relay.mjs` pays the gas for the page when the Vercel environment variable `RELAYER_KEY` is set (a key holding a little Base Sepolia ETH). It only ever calls USDC `transferWithAuthorization`, directly or batched through Multicall3, built from validated fields. Without the variable it answers 503 and the burner pays gas, as before. With it, the page also skips the "Add a little gas" screen.
+- **What is and isn't private:**
+  - Receiver history is unlinkable only when the relayer is configured. Without it, the burner submits every transaction, so the gas payer links all your addresses on-chain.
+  - The payer's (Flex) address is fixed, so everything it pays stays linkable.
+  - Moving or cashing out sweeps all your addresses in one transaction to one destination, which links them from then on.
+- `node test-private.mjs` checks the derivation, the sweep signatures and the relay's input checks offline. `LIVE=1 node test-private.mjs` also simulates sweeps against USDC on Base Sepolia (read-only, no funds needed).
+
 ## Honest limits
 
-- **Not private yet.** Every payment comes from the Flex's fixed address and is linkable on-chain.
+- **Only partly private.** Every payment comes from the Flex's fixed address and is linkable on-chain. The receiving side is unlinkable only with the relayer (see "Private receiving").
 - **A signed cheque, not cash.** If the payer spends the balance before the receiver submits, the transfer fails.
 - **Two taps.** iOS ends the NFC session on the first tap's "not yet" reply.
 - **Small amounts only.** The iPhone burner key lives in browser storage, which is fine for change, not for savings.

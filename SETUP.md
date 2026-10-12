@@ -62,6 +62,7 @@ docker run --rm -d --name speculos -p 5001:5000 -v "$PWD":/app -w /app/flex-app 
 | `node test-budget.mjs` | `one-tap` | Budget mode: limits, Settings pages, the one-tap path, falling back to manual mode |
 | `node test-modes.mjs` | `card-mode` | Card mode, including the one-minute timeout (the test takes about 2 minutes), plus budget mode |
 | `node test-cashout.mjs` | `cashout-*` | Cash-out receipt parsing, with no key needed (see step 7 for the live run) |
+| `node test-private.mjs` | `private-payments` | Private receiving: child addresses, sweep signatures, relay input checks. No emulator needed |
 
 - **Restart the emulator** between test files with `docker restart speculos`.
 - **Stop it** with `docker rm -f speculos`.
@@ -137,6 +138,11 @@ The page is static, `mvp/tapcash/web/`, with no build step. Safari only allows W
    vercel deploy --prod
    ```
    Without the two variables, the "Cash out to card" button stays hidden. So the same code is safe to deploy anywhere.
+6. **Optional: the shared gas relayer** (`web/api/relay.mjs`). Set `RELAYER_KEY` to the private key of a Base Sepolia address holding a little ETH, used only for this:
+   ```sh
+   vercel env add RELAYER_KEY production
+   ```
+   It pays the gas for the page's USDC transfers, so receiving addresses aren't linked by a common gas payer, and the iPhone wallet needs no ETH. Without it, `/api/relay` answers 503 and the iPhone wallet pays gas. See "Private receiving" in `mvp/tapcash/README.md`.
 
 How it works, and what is real versus simulated, is in `mvp/tapcash/README.md` under "Cash out to a card (sandbox)". The other providers tried are in `mvp/tapcash/CASHOUT.md`.
 
