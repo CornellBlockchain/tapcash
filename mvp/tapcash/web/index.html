@@ -48,6 +48,17 @@
   .addr button { background: none; border: 0; color: var(--lime-dark); font-size: 15px; font-weight: 600; }
   .chip .link { margin-left: auto; background: none; border: 0; color: var(--lime-dark); font-size: 15px; font-weight: 600; }
   .addr input { flex: 1; min-width: 0; border: 0; background: none; font: inherit; color: var(--ink); outline: none; }
+  .vcard { align-self: stretch; aspect-ratio: 1.586; display: flex; flex-direction: column; justify-content: space-between; padding: 20px; border-radius: 20px; text-align: left; color: #fff; cursor: pointer;
+    background: radial-gradient(circle at 88% 12%, rgb(198 255 61 / .35), transparent 45%), var(--ink); }
+  .vcard[hidden] { display: none; }
+  .vcard-top { display: flex; align-items: center; gap: 8px; }
+  .vcard-top b { flex: 1; font-size: 16px; }
+  .vcard-top span { background: var(--lime); color: var(--ink); border-radius: 999px; padding: 3px 8px; font-size: 11px; font-weight: 600; }
+  .vcard-num { font: 600 22px ui-monospace, Menlo, monospace; letter-spacing: 1px; }
+  .vcard-bottom { display: flex; align-items: flex-end; gap: 24px; }
+  .vcard-bottom small { display: block; font-size: 10px; letter-spacing: .5px; color: #9A9AA0; }
+  .vcard-bottom b { font: 600 15px ui-monospace, Menlo, monospace; }
+  .vcard-bottom i { margin-left: auto; font: italic 800 26px Inter, sans-serif; letter-spacing: -1px; }
   .big { margin: 0; font-size: 44px; font-weight: 700; color: var(--ink); }
   a { color: var(--ink); font-size: 15px; font-weight: 600; }
 </style>
@@ -112,9 +123,14 @@
   <p id="doneFrom"></p>
   <a id="basescan" target="_blank" rel="noopener">View on Basescan ↗</a>
   <div class="grow"></div>
-  <div class="chip"><div><small>iPhone wallet balance</small><strong class="usdc"></strong></div></div>
+  <div class="chip" id="doneWallet"><div><small>iPhone wallet balance</small><strong class="usdc"></strong></div></div>
   <button class="btn secondary" id="doneMove">Move to my Ledger</button>
-  <div class="chip" id="card" hidden><div><small id="cardLine"></small><strong id="cardLimit"></strong></div></div>
+  <div class="vcard" id="card" hidden>
+    <div class="vcard-top"><b>TapCash</b><span>SANDBOX</span></div>
+    <div class="vcard-num" id="cardNumber"></div>
+    <div class="vcard-bottom"><div><small>VALID THRU</small><b id="cardExp"></b></div><div><small>CVC</small><b id="cardCvc"></b></div><i>VISA</i></div>
+  </div>
+  <p id="cardLimit"></p>
   <p class="err" id="cashErr"></p>
   <button class="btn secondary" id="cashout" hidden>Cash out to card</button>
   <button class="btn secondary" id="coffee" hidden>Buy a $3.50 coffee</button>
@@ -310,8 +326,8 @@ $('tapAgain').onclick = () => tap(2);
 $('cancel').onclick = () => abort?.abort();
 $('newRequest').onclick = () => { resetCard(); amount = '0'; $('amount').textContent = '0'; $('tap').disabled = true; show('receive'); };
 
-// Cash out: send the whole USDC balance to the cash-out address, then api/cashout.mjs issues a
-// Lithic sandbox virtual card with that spend limit (test money, not a real card).
+// Cash out: send the whole USDC balance to the cash-out address, then api/cashout.mjs issues an
+// Increase sandbox virtual card with that spend limit (test money, not a real card).
 const api = (body) => fetch('/api/cashout', body && { method: 'POST', headers: { 'content-type': 'application/json' },
   body: JSON.stringify(body) }).then(r => r.json()).then(j => { if (j.error) throw new Error(j.error); return j; });
 let card = null, cashoutReady = false;  // button shows only where api/cashout is configured
@@ -319,6 +335,8 @@ api().then(() => { cashoutReady = true; resetCard(); }, () => {});
 function resetCard() {
   card = null;
   $('card').hidden = $('coffee').hidden = true;
+  $('doneWallet').hidden = false;
+  $('cardLimit').textContent = '';
   $('cashout').hidden = !cashoutReady;
   $('cashout').disabled = false;
   $('cashout').textContent = 'Cash out to card';
@@ -337,9 +355,9 @@ $('cashout').onclick = async () => {
     await pub.waitForTransactionReceipt({ hash });
     b.textContent = 'Issuing card…';
     card = await api({ hash });
-    $('cardLine').textContent = `Virtual card •••• ${card.last4}  exp ${card.exp}  (sandbox)`;
-    $('cardLimit').textContent = `$${(card.cents / 100).toFixed(2)} to spend`;
+    showCard(false);
     $('card').hidden = $('coffee').hidden = false;
+    $('doneWallet').hidden = true;  // 0 USDC now; the card takes its place
     b.hidden = true;
     await refresh();
   } catch (e) {
@@ -347,6 +365,16 @@ $('cashout').onclick = async () => {
     b.disabled = false; b.textContent = 'Cash out to card';
   }
 };
+// Sandbox card view: tap to show the full number and CVC (fine for test cards only)
+function showCard(reveal) {
+  $('cardNumber').textContent = reveal ? card.number.replace(/(\d{4})(?=\d)/g, '$1 ') : `•••• •••• •••• ${card.last4}`;
+  $('cardExp').textContent = card.exp;
+  $('cardCvc').textContent = reveal ? card.cvc : '•••';
+  $('cardLimit').textContent = `$${(card.cents / 100).toFixed(2)} to spend · tap the card to ${reveal ? 'hide' : 'show'} details`;
+  $('card').dataset.reveal = reveal ? '1' : '';
+}
+$('card').onclick = () => showCard(!$('card').dataset.reveal);
+$('card').querySelector('.vcard-top').prepend(document.querySelector('header svg').cloneNode(true));
 $('coffee').onclick = async () => {
   $('coffee').disabled = true;
   try {

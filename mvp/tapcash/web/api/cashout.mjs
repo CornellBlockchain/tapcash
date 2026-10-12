@@ -4,7 +4,7 @@
 // Sandbox only: no real money. Needs env INCREASE_API_KEY (sandbox key) and CASHOUT_ADDRESS.
 // A sandbox key needs no signup: curl -X POST -H 'Content-Length: 0' https://sandbox.increase.com/groups
 //   GET                            -> { to }                       where to send the USDC
-//   POST { hash }                  -> { card, last4, exp, cents }  card funded by that transfer
+//   POST { hash }                  -> { card, last4, exp, cents, number, cvc }  card funded by that transfer
 //   POST { card, cents, merchant } -> { result }                   simulated purchase (APPROVED or a decline reason)
 const RPC = 'https://sepolia.base.org';
 const INCREASE = 'https://sandbox.increase.com';
@@ -72,7 +72,11 @@ export default async function handler(req, res) {
         authorization_controls: { usage: { category: 'multi_use',
           multi_use: { spending_limits: [{ interval: 'all_time', settlement_amount: limit }] } } } }, `card-${hash}`);
       await increase('/simulations/inbound_ach_transfers', { account_number_id: number.id, amount: limit }, `ach-${hash}`);
-      return res.json({ card: c.id, last4: c.last4, exp: `${c.expiration_month}/${String(c.expiration_year).slice(-2)}`, cents: limit });
+      // Full number and CVC for the page's card view. Sandbox test cards only: a real issuer's card
+      // details never go to the browser, and here anyone with the (public) tx hash could fetch them.
+      const d = await increase(`/cards/${c.id}/details`);
+      return res.json({ card: c.id, last4: c.last4, exp: `${c.expiration_month}/${String(c.expiration_year).slice(-2)}`, cents: limit,
+        number: d.primary_account_number, cvc: d.verification_code });
     }
     if (card) {
       if (!/^sandbox_card_[a-z0-9]+$/.test(card) || !Number.isInteger(cents) || cents <= 0) throw new Error('bad card or amount');
