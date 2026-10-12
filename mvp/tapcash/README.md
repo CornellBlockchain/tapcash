@@ -76,6 +76,24 @@ Card mode is for paying like a card: you turn it on right before paying, and the
 
 `node test-modes.mjs` checks card mode and budget mode on Speculos, starting from a fresh home screen.
 
+## How TapCash uses a Ledger signer
+
+The Flex is the signer. A custom app built with the Ledger secure SDK signs each USDC `transferWithAuthorization` (EIP-3009) inside the secure element. The key never leaves the device. A person decides on the Flex in every mode:
+- **Manual mode:** you check the amount and recipient on the Flex and approve each payment.
+- **Budget mode:** you approve the limits once on the Flex. Payments within them go out on one tap; anything else comes back for review.
+- **Card mode:** you turn it on, on the Flex, for one payment of any amount within one minute.
+
+## Setup page (Device Management Kit)
+
+`web/setup.html` is a desktop page served next to the app at `/setup.html`. It uses Chrome or Edge, over USB, with nothing to install.
+1. It connects to the Flex with Ledger's Device Management Kit over WebHID.
+2. It asks the TapCash app for its address with `E0 02` and P1 = 1. The Flex shows the address in EIP-55 form, and answers only after you touch Confirm. Cancel returns `6985`.
+3. It shows the address, a QR code, and the Base Sepolia USDC and ETH balances for funding.
+
+Tests on Speculos:
+- `node test-setup.mjs` covers the device command.
+- `node test-setup-dmk.cjs` runs the same flow through DMK, using its Speculos transport in place of WebHID.
+
 ## Cash out to a card (sandbox)
 
 After a payment, "Cash out to card" sends the iPhone wallet's USDC to a cash-out address. Then `web/api/cashout.mjs`:
