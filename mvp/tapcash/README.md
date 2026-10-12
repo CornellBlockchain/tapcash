@@ -91,6 +91,13 @@ After a payment, "Cash out to card" sends the iPhone wallet's USDC to a cash-out
 - `node test-cashout.mjs` checks the receipt parsing against real Base Sepolia transfers, with no key. `LIVE=1 node --env-file=.env.local test-cashout.mjs` also runs the sandbox flow.
 - Live at https://tapcash-ruby.vercel.app (Vercel project `tapcash`), with the cashed-out USDC going back to the Flex's address.
 
+## Findings worth knowing
+
+- **Plain commands work over NFC.** The Flex forwards SELECT AID to the app, and iOS sends plain ISO 7816 APDUs with a trailing Le. The SDK's `apdu_parser` rejects that trailing Le, so the app parses its own APDUs.
+- **NFC is off on the home screen.** Card emulation only runs while an NFC-enabled app is open, so nothing answers a phone tapped against the home screen.
+- **`format_fpu64` bug.** In the SDK it doesn't NUL-terminate amounts of 1 or more. That put stack garbage on the review screen until the buffer was zero-initialised.
+- **Public Speculos seed.** The default Speculos seed's first address has an EIP-7702 delegation on Base Sepolia, so USDC verifies its signatures via ERC-1271 and rejects them. `test.mjs` uses its own seed.
+
 ## Private receiving
 
 Each payment request goes to a fresh address, so your receipts aren't linkable through a shared receiving address.
@@ -104,13 +111,6 @@ Each payment request goes to a fresh address, so your receipts aren't linkable t
   - The payer's (Flex) address is fixed, so everything it pays stays linkable.
   - Moving or cashing out sweeps all your addresses in one transaction to one destination, which links them from then on.
 - `node test-private.mjs` checks the derivation, the sweep signatures and the relay's input checks offline. `LIVE=1 node test-private.mjs` also simulates sweeps against USDC on Base Sepolia (read-only, no funds needed).
-
-## Findings worth knowing
-
-- **Plain commands work over NFC.** The Flex forwards SELECT AID to the app, and iOS sends plain ISO 7816 APDUs with a trailing Le. The SDK's `apdu_parser` rejects that trailing Le, so the app parses its own APDUs.
-- **NFC is off on the home screen.** Card emulation only runs while an NFC-enabled app is open, so nothing answers a phone tapped against the home screen.
-- **`format_fpu64` bug.** In the SDK it doesn't NUL-terminate amounts of 1 or more. That put stack garbage on the review screen until the buffer was zero-initialised.
-- **Public Speculos seed.** The default Speculos seed's first address has an EIP-7702 delegation on Base Sepolia, so USDC verifies its signatures via ERC-1271 and rejects them. `test.mjs` uses its own seed.
 
 ## Honest limits
 
