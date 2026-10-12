@@ -114,7 +114,7 @@ Each payment request goes to a fresh address, so your receipts aren't linkable t
 
 ## Honest limits
 
-- **Not private yet.** Every payment comes from the Flex's fixed address and is linkable on-chain.
+- **Only partly private.** Every payment comes from the Flex's fixed address and is linkable on-chain. The receiving side is unlinkable only with the relayer (see "Private receiving").
 - **A signed cheque, not cash.** If the payer spends the balance before the receiver submits, the transfer fails.
 - **Two taps.** iOS ends the NFC session on the first tap's "not yet" reply.
 - **Small amounts only.** The iPhone burner key lives in browser storage, which is fine for change, not for savings.
