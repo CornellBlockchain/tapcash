@@ -35,17 +35,24 @@ static const uint8_t FIDO_AID[] = {0xA0, 0x00, 0x00, 0x06, 0x47, 0x2F, 0x00, 0x0
 // U2F sign request data: challenge(32) | application(32) | key handle length(1) | key handle
 #define U2F_KH_LEN_OFFSET 64
 
-// Payment request (key handle): to(20) | value(8, micro-USDC) | validBefore(4) | nonce(32)
-#define REQ_LEN 64
+// Payment request (key handle): to(20) | value(8, micro-USDC) | validBefore(4) | nonce(32) | chain(1)
+#define REQ_LEN    65
+#define CHAIN_OFFSET 64
 // Address request (key handle): "ADDR". Lets the page fill in where to move funds to.
 static const uint8_t ADDR_REQ[] = {'A', 'D', 'D', 'R'};
 
-// USDC on Base Sepolia (0x036CbD53842c5426634e7929541eC2318f3dCF7e, chainId 84532).
-// Both values checked against the contract's DOMAIN_SEPARATOR() and
+// The chain byte picks one of these USDC contracts; the page never supplies a domain.
+// 0: Base Sepolia (0x036CbD53842c5426634e7929541eC2318f3dCF7e, chainId 84532)
+// 1: Base (0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913, chainId 8453)
+// All values checked against each contract's DOMAIN_SEPARATOR() and
 // TRANSFER_WITH_AUTHORIZATION_TYPEHASH(). Signatures can't be replayed on another chain.
-static const uint8_t DOMAIN_SEPARATOR[32] = {
-    0x71, 0xf1, 0x7a, 0x3b, 0x2f, 0xf3, 0x73, 0xb8, 0x03, 0xd7, 0x0a, 0x5a, 0x07, 0xc0, 0x46, 0xc1,
-    0xa2, 0xbc, 0x8e, 0x89, 0xc0, 0x9e, 0xf7, 0x22, 0xfc, 0xb0, 0x47, 0xab, 0xe9, 0x4c, 0x98, 0x18};
+#define NB_CHAINS 2
+static const char CHAIN_NAMES[NB_CHAINS][13] = {"Base Sepolia", "Base"};  // no pointers: no PIC()
+static const uint8_t DOMAIN_SEPARATOR[NB_CHAINS][32] = {
+    {0x71, 0xf1, 0x7a, 0x3b, 0x2f, 0xf3, 0x73, 0xb8, 0x03, 0xd7, 0x0a, 0x5a, 0x07, 0xc0, 0x46, 0xc1,
+     0xa2, 0xbc, 0x8e, 0x89, 0xc0, 0x9e, 0xf7, 0x22, 0xfc, 0xb0, 0x47, 0xab, 0xe9, 0x4c, 0x98, 0x18},
+    {0x02, 0xfa, 0x72, 0x65, 0xe7, 0xc5, 0xd8, 0x11, 0x18, 0x67, 0x37, 0x27, 0x95, 0x76, 0x99, 0xe4,
+     0xd6, 0x8f, 0x74, 0xcd, 0x74, 0xb7, 0xdb, 0x77, 0xda, 0x71, 0x0f, 0xe8, 0xa2, 0xc7, 0x83, 0x4f}};
 static const uint8_t TYPEHASH[32] = {
     0x7c, 0x7c, 0x6c, 0xdb, 0x67, 0xa1, 0x87, 0x43, 0xf4, 0x9e, 0xc6, 0xfa, 0x9b, 0x35, 0xf5, 0x0d,
     0x52, 0xed, 0x05, 0xcb, 0xed, 0x4c, 0xc5, 0x92, 0xe1, 0x3b, 0x44, 0x50, 0x1c, 0x1a, 0x22, 0x67};
@@ -54,7 +61,7 @@ static const uint32_t PATH[] = {0x8000002C, 0x8000003C, 0x80000000, 0, 0};  // m
 
 static enum { IDLE, REVIEW, APPROVED } state;
 static uint8_t request[REQ_LEN];
-static char review_text[80];
+static char review_text[96];
 // user presence | counter (last byte = v) | DER(r, s) | from(20)
 static uint8_t response[1 + 4 + 72 + 20];
 static size_t response_len;
@@ -286,7 +293,7 @@ static bool sign_request(void) {
     memcpy(buf + 160 + 28, request + 28, 4);         // validBefore
     memcpy(buf + 192, request + 32, 32);             // nonce
     uint8_t msg[2 + 32 + 32] = {0x19, 0x01};
-    memcpy(msg + 2, DOMAIN_SEPARATOR, 32);
+    memcpy(msg + 2, DOMAIN_SEPARATOR[request[CHAIN_OFFSET]], 32);  // chain checked on receipt
     if (cx_keccak_256_hash(buf, sizeof(buf), msg + 34) != CX_OK ||
         cx_keccak_256_hash(msg, sizeof(msg), digest) != CX_OK ||
         bip32_derive_ecdsa_sign_rs_hash_256(CX_CURVE_256K1, PATH, 5, CX_RND_RFC6979 | CX_LAST,
@@ -329,7 +336,8 @@ static void start_review(const uint8_t *kh) {
     char amount[24];
     memcpy(request, kh, REQ_LEN);
     format_usdc(amount, sizeof(amount), read_u64_be(request, 20));
-    size_t n = snprintf(review_text, sizeof(review_text), "%s USDC on Base Sepolia\nto 0x", amount);
+    size_t n = snprintf(review_text, sizeof(review_text), "%s USDC on %s\nto 0x", amount,
+                        CHAIN_NAMES[request[CHAIN_OFFSET]]);
     format_hex(request, 20, review_text + n, sizeof(review_text) - n);
     state = REVIEW;
     nbgl_useCaseChoice(&C_tapcash_64px, "Send payment?", review_text, "Approve", "Reject",
@@ -389,7 +397,7 @@ static void handle_u2f_sign(uint8_t p1, const uint8_t *data, int lc) {
     const uint8_t *kh = data + U2F_KH_LEN_OFFSET + 1;
     uint8_t kh_len = data[U2F_KH_LEN_OFFSET];
     bool is_addr = kh_len == sizeof(ADDR_REQ) && memcmp(kh, ADDR_REQ, sizeof(ADDR_REQ)) == 0;
-    if (kh_len != REQ_LEN && !is_addr) {
+    if ((kh_len != REQ_LEN || kh[CHAIN_OFFSET] >= NB_CHAINS) && !is_addr) {
         io_send_sw(SW_WRONG_DATA);  // "not our key handle"
         return;
     }
@@ -441,7 +449,8 @@ static void handle_u2f_sign(uint8_t p1, const uint8_t *data, int lc) {
             io_send_response_pointer(response, response_len, SW_OK);
             char amount[24];
             format_usdc(amount, sizeof(amount), value);
-            size_t n = snprintf(review_text, sizeof(review_text), "Paid %s USDC\nto 0x", amount);
+            size_t n = snprintf(review_text, sizeof(review_text), "Paid %s USDC on %s\nto 0x", amount,
+                                    CHAIN_NAMES[request[CHAIN_OFFSET]]);
             format_hex(request, 20, review_text + n, sizeof(review_text) - n);  // not kh: the reply overwrote it
             nbgl_useCaseStatus(review_text, true, ui_home);
             return;

@@ -12,7 +12,7 @@ Hold an iPhone near a Ledger Flex, approve on the Flex screen, tap again: USDC m
 - **Two taps.**
   - Tap 1 delivers the request and the Flex shows "Send payment? 5 USDC on Base Sepolia to 0x…".
   - Tap 2, after Approve, returns the signature. Each approval yields exactly one signature.
-- **Signing on the Flex.** `flex-app/src/app_main.c` builds the EIP-712 digest of USDC `transferWithAuthorization` (EIP-3009) itself and signs it with `m/44'/60'/0'/0/0`. It never signs a hash supplied by the page. The domain separator is pinned to USDC on Base Sepolia, so signatures can't be replayed on another chain.
+- **Signing on the Flex.** `flex-app/src/app_main.c` builds the EIP-712 digest of USDC `transferWithAuthorization` (EIP-3009) itself and signs it with `m/44'/60'/0'/0/0`. It never signs a hash supplied by the page. A chain byte in the request picks one of two domain separators built into the app (USDC on Base Sepolia or Base mainnet), and the Flex screen names the chain, so signatures can't be replayed on another chain.
 - **iPhone side** (`web/`):
   - It is the receiver's wallet: a burner key kept in localStorage that also pays the gas.
   - It verifies the signature (recovers the signer and checks it is the Flex), normalises it to low-s, and submits `transferWithAuthorization`.

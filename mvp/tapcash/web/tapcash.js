@@ -1,7 +1,12 @@
 // Wire format shared with flex-app/src/app_main.c. Pure, so test.mjs can import it.
 
-export const USDC = '0x036CbD53842c5426634e7929541eC2318f3dCF7e';
-export const DOMAIN = { name: 'USDC', version: '2', chainId: 84532, verifyingContract: USDC };
+// Index = the request's chain byte; same order as CHAIN_NAMES / DOMAIN_SEPARATOR in app_main.c.
+export const CHAINS = [
+  { name: 'Base Sepolia', domain: { name: 'USDC', version: '2', chainId: 84532, verifyingContract: '0x036CbD53842c5426634e7929541eC2318f3dCF7e' } },
+  { name: 'Base', domain: { name: 'USD Coin', version: '2', chainId: 8453, verifyingContract: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913' } },
+];
+export const DOMAIN = CHAINS[0].domain;
+export const USDC = DOMAIN.verifyingContract;
 export const TYPES = {
   TransferWithAuthorization: [
     { name: 'from', type: 'address' },
@@ -20,14 +25,15 @@ const bytes = h => Uint8Array.from(h.slice(2).match(/../g), x => parseInt(x, 16)
 // Address request key handle: the Flex answers with its address (as `from`) in one tap.
 export const ADDR_REQUEST = new TextEncoder().encode('ADDR');
 
-// Payment request key handle: to(20) | value(8, micro-USDC) | validBefore(4) | nonce(32)
-export function buildRequest(to, value, validBefore, nonce) {
-  const kh = new Uint8Array(64);
+// Payment request key handle: to(20) | value(8, micro-USDC) | validBefore(4) | nonce(32) | chain(1)
+export function buildRequest(to, value, validBefore, nonce, chain = 0) {
+  const kh = new Uint8Array(65);
   const dv = new DataView(kh.buffer);
   kh.set(bytes(to), 0);
   dv.setBigUint64(20, value);
   dv.setUint32(28, validBefore);
   kh.set(bytes(nonce), 32);
+  kh[64] = chain;
   return kh;
 }
 
@@ -50,5 +56,5 @@ export function parseResponse(authenticatorData, signature) {
 
 export function parseRequest(kh) {
   const dv = new DataView(kh.buffer, kh.byteOffset);
-  return { to: hex(kh.slice(0, 20)), value: dv.getBigUint64(20), validBefore: BigInt(dv.getUint32(28)), nonce: hex(kh.slice(32)) };
+  return { to: hex(kh.slice(0, 20)), value: dv.getBigUint64(20), validBefore: BigInt(dv.getUint32(28)), nonce: hex(kh.slice(32, 64)), chain: kh[64] };
 }
