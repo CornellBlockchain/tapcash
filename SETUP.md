@@ -1,6 +1,6 @@
 # Setting up TapCash on your machine
 
-This covers the Flex app, the emulator and tests, the iPhone page, and the card cash-out sandbox. Commands are for macOS or Linux and run from the repo root unless a step says otherwise. Windows notes are at the end.
+This covers the Flex app, the emulator and tests, the iPhone page, the card cash-out sandbox, and the Ledger Wallet CLI. Commands are for macOS or Linux and run from the repo root unless a step says otherwise. Windows notes are at the end.
 
 ## 1. What you need
 
@@ -139,6 +139,67 @@ The page is static, `mvp/tapcash/web/`, with no build step. Safari only allows W
    Without the two variables, the "Cash out to card" button stays hidden. So the same code is safe to deploy anywhere.
 
 How it works, and what is real versus simulated, is in `mvp/tapcash/README.md` under "Cash out to a card (sandbox)". The other providers tried are in `mvp/tapcash/CASHOUT.md`.
+
+## 8. Ledger Wallet CLI
+
+[Ledger Wallet CLI](https://developers.ledger.com/docs/ai-tools/ledger-cli) (`wallet-cli`, npm `@ledgerhq/wallet-cli`) can check, top up and empty the Flex's TapCash address from a terminal. The TapCash address is account 1 of Ledger's Ethereum app, because both use `m/44'/60'/0'/0/0`.
+
+**Is Base Sepolia supported? Partly, and not officially.** In wallet-cli 2.9.0:
+- **Officially supported:** bitcoin, ethereum and solana, plus the testnets `ethereum:sepolia`, `bitcoin:testnet` and `solana:devnet`. Sources: the package README, and the skill shipped with it (`wallet-cli skill retrieve wallet-cli-usage`).
+- **Officially out of scope:** that same skill lists "`send`, `receive`, `operations` ... on testnets and layer 2s (e.g. Base)".
+- **What the CLI accepts anyway:** it knows `base` and `base_sepolia`. `account discover base:sepolia` passes the network check and asks for the Ethereum app, while a made-up network fails with "No currency found". `wallet-cli assets token base_sepolia 0x036CbD53842c5426634e7929541eC2318f3dCF7e` returns `base_sepolia/erc20/usd_coin`, ticker **`tUSDC`**, 6 decimals.
+
+So the commands below may work on Base Sepolia, but Ledger doesn't promise it. Always run a send with `--dry-run` first.
+
+**Setup.** You need Node.js, and Ledger's **Ethereum app** installed on the Flex next to TapCash. wallet-cli signs with the Ethereum app, not with TapCash.
+
+```sh
+npm i -g @ledgerhq/wallet-cli          # or prefix each command with: npx -y @ledgerhq/wallet-cli
+wallet-cli account discover base:sepolia   # Flex on USB, unlocked; opens the Ethereum app
+wallet-cli session view                    # prints the labels
+wallet-cli receive <label>                 # shows that label's address on the Flex screen
+```
+
+Run `receive` on each Base Sepolia label. The TapCash label is the one whose address matches the Flex address TapCash pays from. Use the exact labels `session view` prints.
+
+**Check the balance** (no device needed):
+
+```sh
+wallet-cli balances <tapcash-label>
+```
+
+**Top up** the TapCash address from another Ledger account (for example account 2 of the same Flex, or another Ledger's account):
+
+```sh
+wallet-cli send <other-label> --to <tapcash-address> --amount '5 tUSDC' --dry-run   # checks it, no device
+wallet-cli send <other-label> --to <tapcash-address> --amount '5 tUSDC'             # signs on the device
+```
+
+**Move USDC out** of the TapCash address. This is a normal ERC-20 transfer, so the Flex address pays the gas. Send it about 0.001 Base Sepolia ETH first. (TapCash payments themselves need no ETH.)
+
+```sh
+wallet-cli send <tapcash-label> --to <address> --amount '5 tUSDC' --dry-run
+wallet-cli send <tapcash-label> --to <address> --amount '5 tUSDC'
+```
+
+The ticker is required in `--amount`; it picks the token. It is `tUSDC` on Base Sepolia and `USDC` on Base mainnet.
+
+**Shortcut script.** `mvp/tapcash/wallet-cli.sh` wraps the three steps. Sends are dry runs unless you set `LIVE=1`.
+
+```sh
+export TAPCASH_ACCOUNT=<tapcash-label> TAPCASH_ADDRESS=<tapcash-address>
+mvp/tapcash/wallet-cli.sh balance
+mvp/tapcash/wallet-cli.sh topup <other-label> 5        # dry run
+LIVE=1 mvp/tapcash/wallet-cli.sh out <address> 5       # signs on the device
+```
+
+**If Base Sepolia doesn't work** (for example, `balances` or `send --dry-run` errors on the label):
+- Fund the Flex from https://faucet.circle.com as in step 6.
+- Check its balance at https://sepolia.basescan.org.
+- Don't use `ethereum:sepolia` instead. It is a different chain, and TapCash only signs for Base Sepolia.
+- Base mainnet (`account discover base`, ticker `USDC`) is recognised the same way, but it uses real money. It is not for the demo.
+
+**What was tested.** The CLI was installed and these ran on a machine with no Ledger connected: every `--help`, `session view`, and `assets token` for USDC on Base Sepolia and Base. `account discover base:sepolia` got as far as "No Ledger device found". Nothing that needs a device ran: discover results, `receive`, and all sends. `balances` and `send --dry-run` need a discovered label, so they didn't run either. No transactions were made.
 
 ## Windows (Git Bash)
 
