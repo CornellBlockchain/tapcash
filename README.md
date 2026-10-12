@@ -1,6 +1,8 @@
-# TapCash
+<p align="center"><img src="docs/logo.svg" width="120" alt="TapCash logo"></p>
 
-Tap your Ledger Flex on an iPhone to pay in USDC on Base.
+<h1 align="center">TapCash</h1>
+
+<p align="center">Tap your Ledger Flex on an iPhone to pay in USDC on Base.</p>
 
 - **No app for the receiver.** The iPhone side runs in Safari.
 - **No ETH for the payer.** The receiver's phone pays the gas working like a paymaster. 
@@ -21,6 +23,10 @@ TapCash turns the Ledger into the thing you pay with. You tap it like a card: th
 2. **Approve.** The Flex shows "Send payment? 5 USDC on Base to 0x…". The payer approves.
 3. **Tap again.** The Flex hands over the signed transfer. The phone checks it and sends it.
 4. **Done.** The phone shows the payment and a Basescan link, usually within seconds.
+
+![The iPhone screens: request, hold near the Ledger, approve, received, and add gas](docs/screens.png)
+
+*The iPhone screens, from the [Figma file](https://www.figma.com/design/LoU2gSRJTr4rTEfDQxxVbk/TapCash-Logo): request, hold near the Ledger, approve on the Flex, received, and the first-time gas setup.*
 
 Afterwards, the receiver can move the USDC to their own Ledger, or on testnet, cash it out to a sandbox Visa card.
 
