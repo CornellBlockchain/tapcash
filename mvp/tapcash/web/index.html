@@ -346,10 +346,10 @@ async function prepareLedgerWallet() {
         name: 'TapCash', description: 'Move USDC to your Ledger', url: location.origin,
         icons: [location.origin + '/icon.png'], redirect: { universal: location.href } } });
     }
-    const since = Date.now();
+    const known = new Set(wc.session.keys);  // sessions from earlier attempts don't count
     const { uri, approval } = await wc.connect({ optionalNamespaces: { eip155: {
       chains: ['eip155:1', 'eip155:8453'], methods: ['personal_sign'], events: ['accountsChanged', 'chainChanged'] } } });
-    wcPending = { since };
+    wcPending = { known };
     if (mobile) {
       $('wcLink').href = LEDGER_WALLET_LINK + encodeURIComponent(uri);
       $('wcLink').textContent = 'Connect Ledger Wallet';
@@ -374,11 +374,16 @@ async function useLedgerWalletSession(session) {
   $('wcLink').hidden = $('wcQr').hidden = true;
   wc.disconnect({ topic: session.topic, reason: { code: 6000, message: 'Address received' } }).catch(() => {});
 }
-// Safari may suspend the page while the user approves in Ledger Wallet: re-check on return
-document.addEventListener('visibilitychange', () => {
+// iOS freezes the page while the user approves in Ledger Wallet and the relay socket drops, so the
+// approval is missed. On return: reopen the socket (the relay queues messages), then look for the session.
+document.addEventListener('visibilitychange', async () => {
   if (document.visibilityState !== 'visible' || !wc || !wcPending) return;
-  const fresh = wc.session.getAll().filter(s => s.expiry * 1000 > wcPending.since).at(-1);
-  if (fresh) useLedgerWalletSession(fresh);
+  try { await wc.core.relayer.restartTransport(); } catch {}
+  for (let i = 0; i < 20 && wcPending; i++) {
+    const fresh = wc.session.getAll().find(s => !wcPending.known.has(s.topic));
+    if (fresh) return useLedgerWalletSession(fresh);
+    await new Promise(ok => setTimeout(ok, 500));
+  }
 });
 
 $('moveBtn').onclick = async () => {
