@@ -91,6 +91,20 @@ After a payment, "Cash out to card" sends the iPhone wallet's USDC to a cash-out
 - `node test-cashout.mjs` checks the receipt parsing against real Base Sepolia transfers, with no key. `LIVE=1 node --env-file=.env.local test-cashout.mjs` also runs the sandbox flow.
 - Live at https://tapcash-ruby.vercel.app (Vercel project `tapcash`), with the cashed-out USDC going back to the Flex's address.
 
+## Private receiving
+
+Each payment request goes to a fresh address, so your receipts aren't linkable through a shared receiving address.
+- **Addresses:** request `i` is paid to child key `i` = `keccak256(tcKey ‖ uint32(i))`, derived from the burner key (`childKey` in `web/tapcash.js`). The next index is kept in `localStorage.tcNext` and advances once the Flex has signed for that address, so an address is never reused.
+- **Existing wallets keep working:** the old burner address stays in the wallet as one more holding address, with its USDC, and still pays gas. New payments go to child addresses only.
+- **Balance** is the sum of USDC over the burner and every child used so far, read in one Multicall3 call.
+- **Moving and cashing out:** each address holding USDC signs its own `transferWithAuthorization`, so children never need ETH. All of them go in one transaction (Multicall3 `aggregate3` when there are several), so `api/cashout.mjs` still reads the whole amount from one receipt.
+- **Optional shared relayer:** `web/api/relay.mjs` pays the gas for the page when the Vercel environment variable `RELAYER_KEY` is set (a key holding a little Base Sepolia ETH). It only ever calls USDC `transferWithAuthorization`, directly or batched through Multicall3, built from validated fields. Without the variable it answers 503 and the burner pays gas, as before. With it, the page also skips the "Add a little gas" screen.
+- **What is and isn't private:**
+  - Receiver history is unlinkable only when the relayer is configured. Without it, the burner submits every transaction, so the gas payer links all your addresses on-chain.
+  - The payer's (Flex) address is fixed, so everything it pays stays linkable.
+  - Moving or cashing out sweeps all your addresses in one transaction to one destination, which links them from then on.
+- `node test-private.mjs` checks the derivation, the sweep signatures and the relay's input checks offline. `LIVE=1 node test-private.mjs` also simulates sweeps against USDC on Base Sepolia (read-only, no funds needed).
+
 ## Findings worth knowing
 
 - **Plain commands work over NFC.** The Flex forwards SELECT AID to the app, and iOS sends plain ISO 7816 APDUs with a trailing Le. The SDK's `apdu_parser` rejects that trailing Le, so the app parses its own APDUs.

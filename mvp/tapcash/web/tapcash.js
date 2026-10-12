@@ -1,4 +1,6 @@
-// Wire format shared with flex-app/src/app_main.c. Pure, so test.mjs can import it.
+// Wire format shared with flex-app/src/app_main.c, plus private receiving. Pure, so the tests can import it.
+// 'viem' resolves from node_modules in Node and through the page's import map in Safari.
+import { keccak256, concat, numberToHex, parseSignature, encodeFunctionData, multicall3Abi } from 'viem';
 
 export const USDC = '0x036CbD53842c5426634e7929541eC2318f3dCF7e';
 export const DOMAIN = { name: 'USDC', version: '2', chainId: 84532, verifyingContract: USDC };
@@ -51,4 +53,29 @@ export function parseResponse(authenticatorData, signature) {
 export function parseRequest(kh) {
   const dv = new DataView(kh.buffer, kh.byteOffset);
   return { to: hex(kh.slice(0, 20)), value: dv.getBigUint64(20), validBefore: BigInt(dv.getUint32(28)), nonce: hex(kh.slice(32)) };
+}
+
+// Private receiving: request i is paid to child key i, so receipts don't share an address.
+export const childKey = (root, i) => keccak256(concat([root, numberToHex(i, { size: 4 })]));
+
+// The holding address `account` signs its own transfer, so it never needs ETH; anyone can submit it.
+export async function authorize(account, to, value, validBefore, nonce = hex(crypto.getRandomValues(new Uint8Array(32)))) {
+  const message = { from: account.address, to, value, validAfter: 0n, validBefore, nonce };
+  const { v, r, s } = parseSignature(await account.signTypedData({ domain: DOMAIN, types: TYPES, primaryType: 'TransferWithAuthorization', message }));
+  return { ...message, v: Number(v), r, s };
+}
+
+export const MULTICALL3 = '0xcA11bde05977b3631167028862bE2a173976CA11';
+const TWA = [{ name: 'transferWithAuthorization', type: 'function', stateMutability: 'nonpayable', outputs: [], inputs: [
+  { name: 'from', type: 'address' }, { name: 'to', type: 'address' }, { name: 'value', type: 'uint256' },
+  { name: 'validAfter', type: 'uint256' }, { name: 'validBefore', type: 'uint256' }, { name: 'nonce', type: 'bytes32' },
+  { name: 'v', type: 'uint8' }, { name: 'r', type: 'bytes32' }, { name: 's', type: 'bytes32' }] }];
+
+// One transaction for any number of signed transfers (viem simulateContract/writeContract params):
+// USDC directly for one, else batched through Multicall3, so cash-out finds every Transfer in one receipt.
+export function sweepCall(auths) {
+  const args = a => [a.from, a.to, a.value, a.validAfter, a.validBefore, a.nonce, a.v, a.r, a.s];
+  if (auths.length === 1) return { address: USDC, abi: TWA, functionName: 'transferWithAuthorization', args: args(auths[0]) };
+  return { address: MULTICALL3, abi: multicall3Abi, functionName: 'aggregate3', args: [auths.map(a => ({ target: USDC, allowFailure: false,
+    callData: encodeFunctionData({ abi: TWA, functionName: 'transferWithAuthorization', args: args(a) }) }))] };
 }

@@ -152,25 +152,22 @@
   <button class="btn secondary" id="moveBack">Back</button>
 </section>
 
+<script type="importmap">{ "imports": { "viem": "https://esm.sh/viem@2.57.4" } }</script>
 <script type="module">
-// The iPhone is the receiver's wallet: a burner key in localStorage that also pays gas.
+// The iPhone is the receiver's wallet: a burner key in localStorage. Each request is paid to a fresh
+// child address derived from it (private receiving); the burner, or the shared relayer when deployed, pays gas.
 // WebAuthn is the NFC transport: tap (request), approve on the Flex, tap again (signature).
 import { createPublicClient, createWalletClient, http, parseUnits, formatUnits,
          recoverTypedDataAddress, serializeSignature, toHex, getAddress, isAddress } from 'https://esm.sh/viem@2.57.4';
 import { privateKeyToAccount, generatePrivateKey } from 'https://esm.sh/viem@2.57.4/accounts';
 import { baseSepolia } from 'https://esm.sh/viem@2.57.4/chains';
-import { USDC, DOMAIN, TYPES, ADDR_REQUEST, buildRequest, parseRequest, parseResponse } from './tapcash.js';
+import { USDC, DOMAIN, TYPES, ADDR_REQUEST, buildRequest, parseRequest, parseResponse, childKey, authorize, sweepCall } from './tapcash.js';
 
 const $ = id => document.getElementById(id);
 const show = id => document.querySelectorAll('.screen').forEach(s => (s.hidden = s.id !== id));
 const short = a => a.slice(0, 6) + '…' + a.slice(-4);
 const ABI = [
   { name: 'balanceOf', type: 'function', stateMutability: 'view', inputs: [{ type: 'address' }], outputs: [{ type: 'uint256' }] },
-  { name: 'transfer', type: 'function', stateMutability: 'nonpayable', inputs: [{ type: 'address' }, { type: 'uint256' }], outputs: [{ type: 'bool' }] },
-  { name: 'transferWithAuthorization', type: 'function', stateMutability: 'nonpayable', outputs: [], inputs: [
-    { name: 'from', type: 'address' }, { name: 'to', type: 'address' }, { name: 'value', type: 'uint256' },
-    { name: 'validAfter', type: 'uint256' }, { name: 'validBefore', type: 'uint256' }, { name: 'nonce', type: 'bytes32' },
-    { name: 'v', type: 'uint8' }, { name: 'r', type: 'bytes32' }, { name: 's', type: 'bytes32' }] },
 ];
 
 // Illustration (device with vibration marks at all four corners)
@@ -190,23 +187,54 @@ $('moveArt').innerHTML = art(140, '#0E0E10', '#7FB800');
 
 localStorage.tcKey ??= generatePrivateKey();
 const account = privateKeyToAccount(localStorage.tcKey);
-const pub = createPublicClient({ chain: baseSepolia, transport: http() });
+const pub = createPublicClient({ chain: baseSepolia, transport: http(), batch: { multicall: true } });  // balances in one call
 const wallet = createWalletClient({ account, chain: baseSepolia, transport: http() });
 $('address').textContent = account.address;
 $('walletLine').textContent = 'iPhone wallet  ' + short(account.address);
 
-let balance = 0n;
+// Holding addresses: the burner (receipts from before private receiving) and every child used so far.
+// ponytail: rescans all used children each refresh; skip swept ones if the list ever gets long.
+const child = i => privateKeyToAccount(childKey(localStorage.tcKey, i));
+const holders = () => [account, ...Array.from({ length: Number(localStorage.tcNext || 0) }, (_, i) => child(i))];
+let balance = 0n, held = [];  // held: holding addresses with USDC, for sweeps
 async function refresh() {
-  const [eth, usdc] = await Promise.all([
+  const all = holders();
+  const [eth, ...usdc] = await Promise.all([
     pub.getBalance({ address: account.address }),
-    pub.readContract({ address: USDC, abi: ABI, functionName: 'balanceOf', args: [account.address] }),
+    ...all.map(a => pub.readContract({ address: USDC, abi: ABI, functionName: 'balanceOf', args: [a.address] })),
   ]);
-  document.querySelectorAll('.usdc').forEach(e => (e.textContent = formatUnits(usdc, 6) + ' USDC'));
-  balance = usdc;
-  $('toMove').hidden = $('doneMove').hidden = usdc === 0n;
+  balance = usdc.reduce((a, b) => a + b, 0n);
+  held = all.map((account, i) => ({ account, value: usdc[i] })).filter(h => h.value > 0n);
+  document.querySelectorAll('.usdc').forEach(e => (e.textContent = formatUnits(balance, 6) + ' USDC'));
+  $('toMove').hidden = $('doneMove').hidden = balance === 0n;
   return eth;
 }
-refresh().then(eth => show(eth === 0n ? 'setup' : 'receive'));
+// The shared relayer (api/relay.mjs) pays gas when deployed; then the burner needs no ETH.
+const relayer = fetch('/api/relay').then(r => r.ok, () => false);
+Promise.all([refresh(), relayer]).then(([eth, relay]) => show(eth === 0n && !relay ? 'setup' : 'receive'));
+
+// Submits signed transfers in one transaction and returns its hash.
+const json = (k, v) => typeof v === 'bigint' ? String(v) : v;
+async function submit(auths) {
+  if (await relayer) {
+    const j = await fetch('/api/relay', { method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ auths }, json) }).then(r => r.json());
+    if (j.error) throw new Error(j.error);
+    return j.hash;
+  }
+  const { request } = await pub.simulateContract({ account, ...sweepCall(auths) });
+  return wallet.writeContract(request);
+}
+// Sweep: each holding address signs its own transfer of everything it holds to `to`; one transaction.
+async function sweep(to) {
+  await refresh();
+  if (!held.length) throw new Error('No USDC to move');
+  const validBefore = BigInt(Math.floor(Date.now() / 1000) + 3600);
+  const auths = await Promise.all(held.map(h => authorize(h.account, to, h.value, validBefore)));
+  const hash = await submit(auths);
+  await pub.waitForTransactionReceipt({ hash });
+  return { hash, value: auths.reduce((a, b) => a + b.value, 0n) };
+}
 
 $('copy').onclick = async () => { await navigator.clipboard.writeText(account.address); $('copy').textContent = 'Copied'; };
 $('gasAdded').onclick = async () => {
@@ -231,7 +259,8 @@ async function tap(step) {
   const value = parseUnits(amount, 6);
   if (!pending || pending.value !== value) {
     const nonce = toHex(crypto.getRandomValues(new Uint8Array(32)));
-    pending = { value, kh: buildRequest(account.address, value, Math.floor(Date.now() / 1000) + 3600, nonce) };
+    const i = Number(localStorage.tcNext || 0), to = child(i).address;  // fresh address per request
+    pending = { value, i, to, kh: buildRequest(to, value, Math.floor(Date.now() / 1000) + 3600, nonce) };
   }
   $('holdText').textContent = step === 1 ? `Requesting ${amount} USDC · open TapCash on the Flex` : 'Collecting the signature from your Flex';
   $('step2').classList.toggle('on', step === 2);
@@ -249,7 +278,7 @@ async function tap(step) {
     }});
   } catch (e) {
     if (e.name === 'AbortError') return show('receive');
-    $('flexText').textContent = `${amount} USDC on Base Sepolia\nto ${short(account.address)}`;
+    $('flexText').textContent = `${amount} USDC on Base Sepolia\nto ${short(pending.to)}`;
     $('approveErr').textContent = step === 2 ? 'Not approved yet. Approve on the Flex, then tap again.' : '';
     return show('approve');
   }
@@ -262,9 +291,9 @@ async function tap(step) {
     const signer = await recoverTypedDataAddress({ domain: DOMAIN, types: TYPES, primaryType: 'TransferWithAuthorization',
       message: { from, ...req, validAfter: 0n }, signature: serializeSignature({ r, s, v: BigInt(v) }) });
     if (signer.toLowerCase() !== from.toLowerCase()) throw new Error(`Signature check failed: ${signer} != ${from}`);
-    const args = [from, req.to, req.value, 0n, req.validBefore, req.nonce, v, r, s];
-    const { request } = await pub.simulateContract({ account, address: USDC, abi: ABI, functionName: 'transferWithAuthorization', args });
-    const hash = await wallet.writeContract(request);
+    // Signed for this child: count it as used now (balance scan, never reused), even if submitting fails.
+    localStorage.tcNext = Math.max(Number(localStorage.tcNext || 0), pending.i + 1);
+    const hash = await submit([{ from, ...req, validAfter: 0n, v, r, s }]);
     await pub.waitForTransactionReceipt({ hash });
     $('doneAmount').textContent = `+${formatUnits(req.value, 6)} USDC`;
     $('doneFrom').textContent = 'Received from ' + short(from);
@@ -306,13 +335,11 @@ $('tapAddress').onclick = async () => {
   moveReady();
 };
 $('moveBtn').onclick = async () => {
-  const to = destination(), value = balance;
+  const to = destination();
   $('moveBtn').disabled = true;
   $('moveBtn').textContent = 'Moving…';
   try {
-    const { request } = await pub.simulateContract({ account, address: USDC, abi: ABI, functionName: 'transfer', args: [to, value] });
-    const hash = await wallet.writeContract(request);
-    await pub.waitForTransactionReceipt({ hash });
+    const { hash, value } = await sweep(to);
     $('doneAmount').textContent = `${formatUnits(value, 6)} USDC moved`;
     $('doneFrom').textContent = 'To your Ledger ' + short(to);
     $('basescan').href = `https://sepolia.basescan.org/tx/${hash}`;
@@ -350,11 +377,8 @@ $('cashout').onclick = async () => {
   b.disabled = true; $('cashErr').textContent = '';
   try {
     const { to } = await api();
-    const value = await pub.readContract({ address: USDC, abi: ABI, functionName: 'balanceOf', args: [account.address] });
-    if (value === 0n) throw new Error('No USDC to cash out');
-    b.textContent = `Sending ${formatUnits(value, 6)} USDC…`;
-    const hash = await wallet.writeContract({ address: USDC, abi: ABI, functionName: 'transfer', args: [to, value] });
-    await pub.waitForTransactionReceipt({ hash });
+    b.textContent = `Sending ${formatUnits(balance, 6)} USDC…`;
+    const { hash } = await sweep(to);  // one receipt, as api/cashout.mjs expects
     b.textContent = 'Issuing card…';
     card = await api({ hash });
     showCard(false);
