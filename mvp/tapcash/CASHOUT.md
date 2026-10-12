@@ -6,7 +6,7 @@ Checked on 2026-10-11.
 
 | Provider | Branch | Signup | Result |
 | --- | --- | --- | --- |
-| Increase | `cashout-increase` | None: one unauthenticated call returns a sandbox key | **Working.** Virtual Visa card issued, funded and charged in the sandbox. Deployed at https://tapcash-cashout.vercel.app |
+| Increase | `cashout-increase` | None: one unauthenticated call returns a sandbox key | **Working.** Virtual Visa card issued, funded and charged in the sandbox. Hosted on the `tapcash-ruby` Vercel project (https://tapcash-ruby.vercel.app) once deployed there |
 | Lithic | `cashout-lithic` | Email and password, and you must accept their terms and E-SIGN | Code is written and checked offline. It needs a sandbox key, which needs Sahas to sign up |
 | Immersve | `cashout-immersve` | None: public sandbox credentials are in their docs | **Blocked at KYC.** Sign-in with the wallet, funding source and simulated deposit all work; issuing a card needs KYC |
 | Bridge, Baanx, Mercuryo | — | Sales contact | Sandbox access emailed for; no reply yet |
