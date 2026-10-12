@@ -1,6 +1,6 @@
 // Wire format shared with flex-app/src/app_main.c, plus private receiving. Pure, so the tests can import it.
 // 'viem' resolves from node_modules in Node and through the page's import map in Safari.
-import { keccak256, concat, numberToHex, parseSignature, encodeFunctionData, multicall3Abi } from 'viem';
+import { keccak256, concat, numberToHex, parseSignature, encodeFunctionData, multicall3Abi, parseAbi } from 'viem';
 
 export const USDC = '0x036CbD53842c5426634e7929541eC2318f3dCF7e';
 export const DOMAIN = { name: 'USDC', version: '2', chainId: 84532, verifyingContract: USDC };
@@ -66,10 +66,7 @@ export async function authorize(account, to, value, validBefore, nonce = hex(cry
 }
 
 export const MULTICALL3 = '0xcA11bde05977b3631167028862bE2a173976CA11';
-const TWA = [{ name: 'transferWithAuthorization', type: 'function', stateMutability: 'nonpayable', outputs: [], inputs: [
-  { name: 'from', type: 'address' }, { name: 'to', type: 'address' }, { name: 'value', type: 'uint256' },
-  { name: 'validAfter', type: 'uint256' }, { name: 'validBefore', type: 'uint256' }, { name: 'nonce', type: 'bytes32' },
-  { name: 'v', type: 'uint8' }, { name: 'r', type: 'bytes32' }, { name: 's', type: 'bytes32' }] }];
+const TWA = parseAbi(['function transferWithAuthorization(address from, address to, uint256 value, uint256 validAfter, uint256 validBefore, bytes32 nonce, uint8 v, bytes32 r, bytes32 s)']);
 
 // One transaction for any number of signed transfers (viem simulateContract/writeContract params):
 // USDC directly for one, else batched through Multicall3, so cash-out finds every Transfer in one receipt.

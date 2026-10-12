@@ -13,7 +13,6 @@ assert.equal(childKey(root, 0), childKey(root, 0));
 const kids = [0, 1, 2, 1000].map(i => privateKeyToAccount(childKey(root, i)).address);
 assert.equal(new Set([...kids, privateKeyToAccount(root).address]).size, 5);
 assert.notEqual(childKey(generatePrivateKey(), 0), childKey(root, 0));
-assert.equal(privateKeyToAccount(childKey(root, 7)).address, privateKeyToAccount(childKey(root, 7)).address);
 
 // Sweep signature recovers to the child that signed it
 const kid = privateKeyToAccount(childKey(root, 3)), dest = '0x000000000000000000000000000000000000dEaD';

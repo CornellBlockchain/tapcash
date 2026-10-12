@@ -152,23 +152,20 @@
   <button class="btn secondary" id="moveBack">Back</button>
 </section>
 
-<script type="importmap">{ "imports": { "viem": "https://esm.sh/viem@2.57.4" } }</script>
+<script type="importmap">{ "imports": { "viem": "https://esm.sh/viem@2.57.4", "viem/": "https://esm.sh/viem@2.57.4/" } }</script>
 <script type="module">
 // The iPhone is the receiver's wallet: a burner key in localStorage. Each request is paid to a fresh
 // child address derived from it (private receiving); the burner, or the shared relayer when deployed, pays gas.
 // WebAuthn is the NFC transport: tap (request), approve on the Flex, tap again (signature).
 import { createPublicClient, createWalletClient, http, parseUnits, formatUnits,
-         recoverTypedDataAddress, serializeSignature, toHex, getAddress, isAddress } from 'https://esm.sh/viem@2.57.4';
-import { privateKeyToAccount, generatePrivateKey } from 'https://esm.sh/viem@2.57.4/accounts';
-import { baseSepolia } from 'https://esm.sh/viem@2.57.4/chains';
+         recoverTypedDataAddress, serializeSignature, toHex, getAddress, isAddress, erc20Abi } from 'viem';
+import { privateKeyToAccount, generatePrivateKey } from 'viem/accounts';
+import { baseSepolia } from 'viem/chains';
 import { USDC, DOMAIN, TYPES, ADDR_REQUEST, buildRequest, parseRequest, parseResponse, childKey, authorize, sweepCall } from './tapcash.js';
 
 const $ = id => document.getElementById(id);
 const show = id => document.querySelectorAll('.screen').forEach(s => (s.hidden = s.id !== id));
 const short = a => a.slice(0, 6) + '…' + a.slice(-4);
-const ABI = [
-  { name: 'balanceOf', type: 'function', stateMutability: 'view', inputs: [{ type: 'address' }], outputs: [{ type: 'uint256' }] },
-];
 
 // Illustration (device with vibration marks at all four corners)
 const arc = (cx, cy, r, a0, a1) => {
@@ -201,7 +198,7 @@ async function refresh() {
   const all = holders();
   const [eth, ...usdc] = await Promise.all([
     pub.getBalance({ address: account.address }),
-    ...all.map(a => pub.readContract({ address: USDC, abi: ABI, functionName: 'balanceOf', args: [a.address] })),
+    ...all.map(a => pub.readContract({ address: USDC, abi: erc20Abi, functionName: 'balanceOf', args: [a.address] })),
   ]);
   balance = usdc.reduce((a, b) => a + b, 0n);
   held = all.map((account, i) => ({ account, value: usdc[i] })).filter(h => h.value > 0n);
