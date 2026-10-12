@@ -102,7 +102,7 @@ The page is static, `mvp/tapcash/web/`, with no build step. Safari only allows W
 
 ## 7. Card cash-out sandbox (`cashout-increase`)
 
-**Fastest:** use Sahas's deployment, https://tapcash-cashout.vercel.app. It is already configured, so make a payment there and tap "Cash out to card".
+**Fastest:** use the live page, https://tapcash-ruby.vercel.app. It is already configured, so make a payment there and tap "Cash out to card".
 
 **To run your own:**
 

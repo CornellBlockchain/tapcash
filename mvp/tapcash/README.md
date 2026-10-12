@@ -89,7 +89,7 @@ After a payment, "Cash out to card" sends the iPhone wallet's USDC to a cash-out
 - It needs two Vercel environment variables: `INCREASE_API_KEY` and `CASHOUT_ADDRESS` (where the USDC goes). Without them the button stays hidden.
 - A replayed transaction hash returns the same card, because Increase's `Idempotency-Key` is set from the hash.
 - `node test-cashout.mjs` checks the receipt parsing against real Base Sepolia transfers, with no key. `LIVE=1 node --env-file=.env.local test-cashout.mjs` also runs the sandbox flow.
-- Deployed at https://tapcash-cashout.vercel.app (Vercel project `tapcash-cashout`).
+- Live at https://tapcash-ruby.vercel.app (Vercel project `tapcash`), with the cashed-out USDC going back to the Flex's address.
 
 ## Findings worth knowing
 
