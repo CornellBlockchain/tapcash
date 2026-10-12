@@ -214,7 +214,19 @@ async function refresh() {
   $('toMove').hidden = $('doneMove').hidden = usdc === 0n;
   return eth;
 }
-refresh().then(eth => show(eth === 0n ? 'setup' : 'receive'));
+refresh().then(async eth => {
+  if (eth > 0n) return show('receive');
+  show('setup');
+  // Gas tap: ask api/gas for a small top-up; if it isn't configured or fails, the manual screen stays
+  $('setupErr').textContent = 'Adding gas automatically…';
+  try {
+    const r = await fetch('/api/gas', { method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ address: account.address }) }).then(r => r.json());
+    if (r.error) throw new Error(r.error);
+    if ((await refresh()) > 0n) return show('receive');
+  } catch {}
+  $('setupErr').textContent = '';
+});
 
 $('copy').onclick = async () => { await navigator.clipboard.writeText(account.address); $('copy').textContent = 'Copied'; };
 $('gasAdded').onclick = async () => {
