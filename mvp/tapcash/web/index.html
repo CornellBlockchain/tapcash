@@ -215,7 +215,7 @@ async function refresh() {
   return eth;
 }
 refresh().then(async eth => {
-  if (eth > 0n) return show('receive');
+  if (eth > 0n) return (await resumeLedgerWallet()) || show('receive');
   show('setup');
   // Gas tap: ask api/gas for a small top-up; if it isn't configured or fails, the manual screen stays
   $('setupErr').textContent = 'Adding gas automatically…';
@@ -331,7 +331,10 @@ $('tapAddress').onclick = async () => {
 const WC_PROJECT_ID = 'dd1ed69c86e875fbde469749a73030fd';  // Reown project ID (public); empty hides the button
 const LEDGER_WALLET_LINK = 'ledgerlive://wc?uri=';  // ponytail: from memory; check the Reown wallet registry
 const mobile = /iPhone|iPad|Android/.test(navigator.userAgent);
-let wc = null, wcPending = null;
+let wc = null, wcPending = null;  // wcPending: { known: session topics that existed before this connect }
+const ensureWc = async () => wc ??= await (await import('https://esm.sh/@walletconnect/sign-client@2.26.0')).SignClient.init({
+  projectId: WC_PROJECT_ID, metadata: { name: 'TapCash', description: 'Move USDC to your Ledger', url: location.origin,
+    icons: [location.origin + '/icon.png'], redirect: { universal: location.origin } } });
 async function prepareLedgerWallet() {
   if (!WC_PROJECT_ID) return;
   if (mobile) {
@@ -340,16 +343,13 @@ async function prepareLedgerWallet() {
     $('wcLink').hidden = false;
   }
   try {
-    if (!wc) {
-      const { SignClient } = await import('https://esm.sh/@walletconnect/sign-client@2.26.0');
-      wc = await SignClient.init({ projectId: WC_PROJECT_ID, metadata: {
-        name: 'TapCash', description: 'Move USDC to your Ledger', url: location.origin,
-        icons: [location.origin + '/icon.png'], redirect: { universal: location.href } } });
-    }
+    await ensureWc();
     const known = new Set(wc.session.keys);  // sessions from earlier attempts don't count
     const { uri, approval } = await wc.connect({ optionalNamespaces: { eip155: {
       chains: ['eip155:1', 'eip155:8453'], methods: ['personal_sign'], events: ['accountsChanged', 'chainChanged'] } } });
     wcPending = { known };
+    // Returning from Ledger Wallet can reload the page (its redirect, or iOS discarding the tab): this note lets it resume
+    localStorage.tcWcPending = JSON.stringify({ known: [...known], at: Date.now() });
     if (mobile) {
       $('wcLink').href = LEDGER_WALLET_LINK + encodeURIComponent(uri);
       $('wcLink').textContent = 'Connect Ledger Wallet';
@@ -367,6 +367,7 @@ async function prepareLedgerWallet() {
 async function useLedgerWalletSession(session) {
   if (!wcPending || !session) return;
   wcPending = null;
+  localStorage.removeItem('tcWcPending');
   const account = session.namespaces.eip155?.accounts?.[0];  // "eip155:<chain>:<address>"
   $('dest').value = account ? account.split(':')[2] : '';
   $('dest').oninput();
@@ -374,17 +375,37 @@ async function useLedgerWalletSession(session) {
   $('wcLink').hidden = $('wcQr').hidden = true;
   wc.disconnect({ topic: session.topic, reason: { code: 6000, message: 'Address received' } }).catch(() => {});
 }
-// iOS freezes the page while the user approves in Ledger Wallet and the relay socket drops, so the
-// approval is missed. On return: reopen the socket (the relay queues messages), then look for the session.
-document.addEventListener('visibilitychange', async () => {
-  if (document.visibilityState !== 'visible' || !wc || !wcPending) return;
+// iOS freezes the page while the user is in Ledger Wallet and the relay socket drops, so the approval is
+// missed. Reopen the socket (the relay queues messages), then look for the new session.
+async function collectApproval() {
+  $('moveHint').textContent = 'Getting your address from Ledger Wallet…';
   try { await wc.core.relayer.restartTransport(); } catch {}
   for (let i = 0; i < 20 && wcPending; i++) {
     const fresh = wc.session.getAll().find(s => !wcPending.known.has(s.topic));
     if (fresh) return useLedgerWalletSession(fresh);
     await new Promise(ok => setTimeout(ok, 500));
   }
+  if (wcPending) $('moveHint').textContent = "No approval yet. Approve in Ledger Wallet, or tap Connect again.";
+}
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible' && wc && wcPending) collectApproval();
 });
+// After a reload: back to the Move screen, and pick up the approval with the stored WalletConnect state
+async function resumeLedgerWallet() {
+  const saved = JSON.parse(localStorage.tcWcPending || 'null');
+  if (!WC_PROJECT_ID || !saved || Date.now() - saved.at > 10 * 60e3) return false;
+  moveReady();
+  show('move');
+  try { await ensureWc(); } catch { return false; }
+  wcPending = { known: new Set(saved.known) };
+  await collectApproval();
+  if (wcPending) {  // never approved: start over with a fresh link
+    wcPending = null;
+    localStorage.removeItem('tcWcPending');
+    prepareLedgerWallet();
+  }
+  return true;
+}
 
 $('moveBtn').onclick = async () => {
   const to = destination(), value = balance;
