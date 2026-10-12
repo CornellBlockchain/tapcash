@@ -55,9 +55,6 @@
   .vcard[hidden] { display: none; }
   .vcard-top { display: flex; align-items: center; gap: 8px; }
   .vcard-top b { flex: 1; font-size: 18px; font-weight: 500; }
-  .vcard-chip { width: 48px; height: 36px; border-radius: 7px; box-shadow: inset 0 0 0 1px rgb(0 0 0 / .2);
-    background: linear-gradient(90deg, transparent 30%, rgb(0 0 0 / .22) 30% 32%, transparent 32% 68%, rgb(0 0 0 / .22) 68% 70%, transparent 70%),
-      linear-gradient(0deg, transparent 46%, rgb(0 0 0 / .22) 46% 54%, transparent 54%), linear-gradient(135deg, #F2F2F2, #A9A9A9); }
   .vcard-details { display: flex; gap: 20px; font: 500 13px ui-monospace, Menlo, monospace; color: #C9CCD3; }
   .vcard-details[hidden] { display: none; }
   .vcard-details small { font: 500 10px Inter, sans-serif; letter-spacing: .5px; color: #8E9198; margin-right: 6px; }
@@ -132,7 +129,6 @@
   <button class="btn secondary" id="doneMove">Move to my Ledger</button>
   <div class="vcard" id="card" hidden>
     <div class="vcard-top"><b>TapCash</b><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#C9CCD3" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M8 8.5a5 5 0 0 1 0 7M12 6a9 9 0 0 1 0 12M16 3.5a13 13 0 0 1 0 17"/></svg></div>
-    <div class="vcard-chip"></div>
     <div class="vcard-details" id="cardDetails" hidden><span><small>VALID THRU</small><b id="cardExp"></b></span><span><small>CVC</small><b id="cardCvc"></b></span></div>
     <div class="vcard-bottom"><span class="vcard-num" id="cardNumber"></span><i>VISA</i></div>
   </div>
