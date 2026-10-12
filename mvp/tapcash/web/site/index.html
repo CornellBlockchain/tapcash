@@ -5,14 +5,18 @@
 <title>TapCash: tap your Ledger, pay in USDC</title>
 <meta name="description" content="Tap a Ledger Flex to an iPhone, approve on the Flex, and USDC moves on Base. The receiver needs only Safari; the payer needs no ETH.">
 <link rel="icon" href="/icon.png">
+<link rel="apple-touch-icon" href="/icon.png">
+<meta name="theme-color" content="#ffffff">
+<meta name="format-detection" content="telephone=no">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap">
 <style>
   :root { --ink: #0E0E10; --muted: #6B6B70; --soft: #F3F3F1; --line: #E4E4E1; --lime: #C6FF3D; --lime-dark: #7FB800; }
   * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
   body { margin: 0; font-family: Inter, -apple-system, system-ui, sans-serif; color: var(--ink); background: #fff; line-height: 1.4; }
   img { display: block; max-width: 100%; height: auto; }
-  .wrap { max-width: 1080px; margin: 0 auto; padding-inline: 20px; }
+  .wrap { max-width: 1080px; margin: 0 auto; padding-inline: max(20px, env(safe-area-inset-left)) max(20px, env(safe-area-inset-right)); }
   h1, h2, h3, p { margin: 0; }
   h1 { font-size: clamp(40px, 7vw, 64px); font-weight: 700; line-height: 1.05; letter-spacing: -1.5px; }
   h2 { font-size: clamp(28px, 4vw, 36px); font-weight: 600; line-height: 1.15; letter-spacing: -.5px; }
@@ -88,11 +92,12 @@
 
   .security .chip p, .tools .chip p { margin-top: 8px; font-size: 15px; }
 
-  footer { border-top: 1px solid var(--line); padding: 32px 0 48px; }
+  footer { border-top: 1px solid var(--line); padding-top: 32px; padding-bottom: max(48px, calc(env(safe-area-inset-bottom) + 24px)); }
   footer p { font-size: 14px; }
+  footer a { display: inline-block; padding: 13px 0; }  /* 44px tap target */
 
   @media (max-width: 479px) { .actions .btn { flex: 1 1 100%; } }
-  @media (min-width: 800px) {
+  @media (min-width: 640px) {
     .hero { grid-template-columns: 1.15fr .85fr; padding-top: 48px; }
     section { padding: 88px 0; }
     .steps { grid-template-columns: repeat(4, 1fr); }
@@ -120,7 +125,7 @@
       <p class="note">Works on a real Ledger Flex today, on the Base Sepolia testnet.</p>
     </div>
     <div class="halo">
-      <div class="phone"><img src="iphone-request.webp" width="520" height="1125" alt="TapCash on iPhone: a request for 5 USDC with a Tap Ledger button"></div>
+      <div class="phone"><img src="iphone-request.webp" width="520" height="1125" fetchpriority="high" alt="TapCash on iPhone: a request for 5 USDC with a Tap Ledger button"></div>
     </div>
   </section>
 
