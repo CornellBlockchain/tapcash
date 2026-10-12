@@ -78,10 +78,18 @@ Card mode is for paying like a card: you turn it on right before paying, and the
 
 ## Cash out to a card (sandbox)
 
-After a payment, "Cash out to card" sends the iPhone wallet's USDC to a cash-out address. `web/api/cashout.mjs` then reads the amount from the on-chain receipt and issues a [Lithic](https://lithic.com) sandbox virtual card with that spend limit. "Buy a $3.50 coffee" runs a simulated card authorization against it.
-- This is test money in Lithic's sandbox, not a real card. In production the same step would go to a card issuer such as Baanx (Ledger CL Card) or Mercuryo Spend.
-- It needs two Vercel environment variables: `LITHIC_API_KEY` (a sandbox key) and `CASHOUT_ADDRESS` (where the USDC goes). Without them the button stays hidden.
-- `node test-cashout.mjs` checks the receipt parsing against real Base Sepolia transfers. It needs no key.
+After a payment, "Cash out to card" sends the iPhone wallet's USDC to a cash-out address. Then `web/api/cashout.mjs`:
+1. reads the amount from the on-chain receipt;
+2. issues an [Increase](https://increase.com) sandbox virtual Visa card with that spend limit;
+3. funds it with a simulated ACH deposit, standing in for the USDC-to-USD off-ramp.
+
+"Buy a $3.50 coffee" then runs a simulated card authorization, which comes back approved or with a decline reason such as `breaches_limit`.
+- This is test money in Increase's sandbox, not a real card. In production the same step would go to a card issuer such as Baanx (Ledger CL Card) or Mercuryo Spend.
+- A sandbox key needs no signup: `curl -X POST -H 'Content-Length: 0' https://sandbox.increase.com/groups` returns one.
+- It needs two Vercel environment variables: `INCREASE_API_KEY` and `CASHOUT_ADDRESS` (where the USDC goes). Without them the button stays hidden.
+- A replayed transaction hash returns the same card, because Increase's `Idempotency-Key` is set from the hash.
+- `node test-cashout.mjs` checks the receipt parsing against real Base Sepolia transfers, with no key. `LIVE=1 node --env-file=.env.local test-cashout.mjs` also runs the sandbox flow.
+- Deployed at https://tapcash-cashout.vercel.app (Vercel project `tapcash-cashout`).
 
 ## Findings worth knowing
 
