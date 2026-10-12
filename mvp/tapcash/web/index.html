@@ -233,12 +233,11 @@ async function refresh() {
 refresh().then(async eth => {
   if (eth > 0n) return (await resumeLedgerWallet()) || show('receive');
   show('setup');
-  if (chainIdx !== 0) return;  // the gas tap is testnet only
   // Gas tap: ask api/gas for a small top-up; if it isn't configured or fails, the manual screen stays
   $('setupErr').textContent = 'Adding gas automatically…';
   try {
     const r = await fetch('/api/gas', { method: 'POST', headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ address: account.address }) }).then(r => r.json());
+      body: JSON.stringify({ address: account.address, chain: chainIdx }) }).then(r => r.json());
     if (r.error) throw new Error(r.error);
     if ((await refresh()) > 0n) return show('receive');
   } catch {}
