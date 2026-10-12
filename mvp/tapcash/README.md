@@ -91,6 +91,24 @@ After a payment, "Cash out to card" sends the iPhone wallet's USDC to a cash-out
 - `node test-cashout.mjs` checks the receipt parsing against real Base Sepolia transfers, with no key. `LIVE=1 node --env-file=.env.local test-cashout.mjs` also runs the sandbox flow.
 - Live at https://tapcash-ruby.vercel.app (Vercel project `tapcash`), with the cashed-out USDC going back to the Flex's address.
 
+## From a terminal: Ledger Wallet CLI
+
+The TapCash address is account 1 of Ledger's Ethereum app (`m/44'/60'/0'/0/0`). So Ledger's `wallet-cli` can check it, top it up and empty it, with the Ethereum app installed on the Flex.
+
+```sh
+wallet-cli account discover base:sepolia                               # once, Flex on USB
+wallet-cli session view                                                # find the labels
+wallet-cli balances <tapcash-label>                                    # no device needed
+wallet-cli send <other-label> --to <tapcash-address> --amount '5 tUSDC' --dry-run  # top up
+wallet-cli send <tapcash-label> --to <address> --amount '5 tUSDC' --dry-run        # move out (needs a little ETH for gas)
+```
+
+Drop `--dry-run` to sign on the device. `wallet-cli.sh` wraps these steps.
+- **Not officially supported.** wallet-cli 2.9.0 recognises Base Sepolia, where USDC has the ticker `tUSDC`. But Ledger's own skill lists send on testnets and layer 2s such as Base as out of scope.
+- **Not tested with a device.** Only the non-device commands ran here.
+
+Details, the fallback and what was tested are in `SETUP.md`, step 8.
+
 ## Findings worth knowing
 
 - **Plain commands work over NFC.** The Flex forwards SELECT AID to the app, and iOS sends plain ISO 7816 APDUs with a trailing Le. The SDK's `apdu_parser` rejects that trailing Le, so the app parses its own APDUs.
