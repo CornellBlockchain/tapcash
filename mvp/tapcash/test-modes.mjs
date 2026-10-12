@@ -16,11 +16,20 @@ const sign = kh => {
 };
 const events = async () => (await (await fetch(API + '/events')).json()).events;
 const screen = async () => (await events()).map(e => e.text).join('');
-const press = async text => {  // touch the last button with this label
-  const e = (await events()).findLast(e => e.text === text);
-  assert.ok(e, `no "${text}" on screen`);
+const press = async text => {  // wait until this label is on the current screen, then touch it
+  let e;
+  for (let i = 0; !(e = (await (await fetch(API + '/events?currentscreenonly=true')).json()).events.find(e => e.text === text)); i++) {
+    assert.ok(i < 40, `no "${text}" on screen`);  // e.g. a "Rejected" status still showing
+    await sleep(250);
+  }
   await post('/finger', { action: 'press-and-release', x: 240, y: e.y + 18 });
   await sleep(1500);
+};
+press.home = async () => {  // wait out a status screen (e.g. "Rejected") until home is back
+  for (let i = 0; !(await (await fetch(API + '/events?currentscreenonly=true')).json()).events.some(e => e.text === 'Quit app'); i++) {
+    assert.ok(i < 40, 'home screen did not come back');
+    await sleep(250);
+  }
 };
 const req = usdc => buildRequest('0x000000000000000000000000000000000000dEaD', BigInt(usdc * 1e6),
   Math.floor(Date.now() / 1000) + 3600, toHex(crypto.getRandomValues(new Uint8Array(32))));
@@ -42,7 +51,7 @@ async function assertReview(usdc) {
   await sleep(1000);
   assert.match(await screen(), new RegExp(`${usdc} USDC on Base Sepolia`));
   await press('Reject');
-  await sleep(1500);
+  await press.home();
 }
 async function payOneTap(usdc) {
   const kh = req(usdc), resp = await sign(kh);
