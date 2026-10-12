@@ -45,6 +45,44 @@ Before the first payment:
 - Fund the Flex address with Base Sepolia USDC from faucet.circle.com.
 - Send about 0.001 Base Sepolia ETH to the iPhone wallet shown on the page.
 
+## Payment modes
+
+- **Manual mode (two taps)** is the default. Every payment is reviewed on the Flex: tap, approve, tap again.
+- **Budget mode (spending limits)** signs payments within your limits on one tap.
+- **Card mode (one uncapped transaction)** signs the next payment, of any amount, on one tap, then turns off.
+
+## Budget mode (spending limits)
+
+Budget mode is optional, and off by default. With it off, the Flex is in manual mode.
+- Turn it on with the "Budget mode" switch on the first Settings page (the gear on the home screen).
+- After that, payments up to the per-payment limit are signed on the first tap, with no review. The second tap isn't needed, and the page needs no change.
+- Budget mode stops when the total budget or the number of payments is used up, or when the app closes, since it lives only in the app's memory.
+- The next three Settings pages set its limits:
+  - per payment: 1, 5, 10 or 50 USDC (default 5);
+  - total: 10, 20, 100 or 500 USDC (default 20);
+  - number of payments: 1, 5, 10 or 25 (default 10).
+- Bigger payments, or payments past a limit, fall back to manual mode: a review and two taps.
+- The home screen shows what's left, and the same switch ends it at once.
+- The risk is like a contactless card's no-PIN limit: someone who taps your open, unlocked Flex can take at most what's left of the budget.
+
+## Card mode (one uncapped transaction)
+
+Card mode is for paying like a card: you turn it on right before paying, and the payment terminal (the iPhone) sets the amount.
+- On the Flex home screen, touch "Turn on card mode" and confirm.
+- The next payment, of any amount, is signed on the first tap with no review. Then card mode turns off by itself.
+- It also turns off after one minute if no payment comes, with "Turn off card mode", or when the app closes. It doesn't spend budget mode's budget. Afterwards the Flex is back in manual mode, or in budget mode if that is on.
+- The Flex shows what it paid, and to whom, right after.
+- The risk: while it's on, whoever taps the Flex sets the amount, and on-chain payments can't be charged back. Turn it on only at the moment you pay.
+
+`node test-modes.mjs` checks card mode and budget mode on Speculos, starting from a fresh home screen.
+
+## Cash out to a card (sandbox)
+
+After a payment, "Cash out to card" sends the iPhone wallet's USDC to a cash-out address. `web/api/cashout.mjs` then reads the amount from the on-chain receipt and issues a [Lithic](https://lithic.com) sandbox virtual card with that spend limit. "Buy a $3.50 coffee" runs a simulated card authorization against it.
+- This is test money in Lithic's sandbox, not a real card. In production the same step would go to a card issuer such as Baanx (Ledger CL Card) or Mercuryo Spend.
+- It needs two Vercel environment variables: `LITHIC_API_KEY` (a sandbox key) and `CASHOUT_ADDRESS` (where the USDC goes). Without them the button stays hidden.
+- `node test-cashout.mjs` checks the receipt parsing against real Base Sepolia transfers. It needs no key.
+
 ## Findings worth knowing
 
 - **Plain commands work over NFC.** The Flex forwards SELECT AID to the app, and iOS sends plain ISO 7816 APDUs with a trailing Le. The SDK's `apdu_parser` rejects that trailing Le, so the app parses its own APDUs.
@@ -57,4 +95,4 @@ Before the first payment:
 - **Not private yet.** Every payment comes from the Flex's fixed address and is linkable on-chain.
 - **A signed cheque, not cash.** If the payer spends the balance before the receiver submits, the transfer fails.
 - **Two taps.** iOS ends the NFC session on the first tap's "not yet" reply.
-- **Pocket-cash only.** The iPhone burner key lives in browser storage, which is fine for change, not for savings.
+- **Small amounts only.** The iPhone burner key lives in browser storage, which is fine for change, not for savings.

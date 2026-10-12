@@ -59,19 +59,181 @@ static char review_text[80];
 static uint8_t response[1 + 4 + 72 + 20];
 static size_t response_len;
 
+// Budget mode: after one approval on the Flex, payments up to the per-tap cap are signed on the
+// first tap, without review, until the total or the number of payments is used up, or the app
+// closes (RAM only). All three limits are picked in Settings; defaults 5 USDC per tap,
+// 20 USDC in total, 10 payments.
+// ponytail: preset caps and no time limit (no clock on the Flex); a number keyboard if presets aren't enough.
+#define USDC(n) ((uint64_t) (n) * 1000000)
+#define NB_CAPS 4  // one settings page each
+static const uint32_t PER_TAP_CAPS[NB_CAPS] = {1, 5, 10, 50};   // USDC
+static const uint32_t TOTAL_CAPS[NB_CAPS] = {10, 20, 100, 500};  // USDC
+static const uint32_t COUNT_CAPS[NB_CAPS] = {1, 5, 10, 25};       // payments
+static uint8_t per_tap_idx, total_idx, count_idx;  // set in app_main: apps can't have initialized .data
+static uint64_t budget_left;          // 0 = off
+static uint32_t budget_taps_left;
+static uint8_t budget_paid[REQ_LEN];  // last one-tap (budget or card) payment, so a retried tap gets the same reply
+static bool budget_paid_valid;        // false until a one-tap payment, and once `response` changes
+
+// Card mode: turned on right before paying, it lets the next payment be signed on the first tap,
+// without review and with no amount limit, like a card the merchant's terminal (the iPhone) charges.
+// It turns off after that one payment, after one minute, when turned off, or when the app closes (RAM only).
+#define CARD_MODE_TICKS 600  // SDK ticker events come every 100 ms: one minute
+static bool card_mode;
+static uint16_t card_ticks_left;
+static char home_text[80];
+
 static void app_quit(void) {
     os_sched_exit(-1);
 }
 
+static void format_usdc(char *out, size_t len, uint64_t micro) {
+    memset(out, 0, len);  // SDK format_fpu64 doesn't NUL-terminate amounts >= 1
+    format_fpu64_trimmed(out, len, micro, 6);
+}
+
+static void card_toggle(void);
+static void settings_changed(int token, uint8_t index, int page);
+
+enum { BUDGET_TOKEN = FIRST_USER_TOKEN, PER_TAP_TOKEN, TOTAL_TOKEN, COUNT_TOKEN };
+
+// Home and settings screens. All filled at runtime (apps can't have initialized .data). The SDK
+// keeps pointers to these, so updating them in place shows the change when the user goes back
+// home or reopens Settings; redrawing a settings page by number lands on the wrong page.
+static nbgl_homeAction_t home_action;
+static char per_tap_text[NB_CAPS][24], total_text[NB_CAPS][24], count_text[NB_CAPS][24];
+static const char *per_tap_names[NB_CAPS], *total_names[NB_CAPS], *count_names[NB_CAPS];
+static nbgl_contentSwitch_t budget_switch;
+static nbgl_content_t settings_contents[4];
+static nbgl_genericContents_t settings;
+
+static void ui_update(void) {
+    budget_switch.initState = budget_left ? ON_STATE : OFF_STATE;
+    settings_contents[1].content.choicesList.initChoice = per_tap_idx;
+    settings_contents[2].content.choicesList.initChoice = total_idx;
+    settings_contents[3].content.choicesList.initChoice = count_idx;
+    if (card_mode) {
+        snprintf(home_text, sizeof(home_text), "Card mode is on for 1 minute:\nthe next tap pays");
+    } else if (budget_left) {
+        char left[24];
+        format_usdc(left, sizeof(left), budget_left);
+        snprintf(home_text, sizeof(home_text), "Budget mode: %s USDC left\nfor %u more payment%s",
+                 left, (unsigned) budget_taps_left, budget_taps_left == 1 ? "" : "s");
+    } else {
+        snprintf(home_text, sizeof(home_text), "Manual mode: two taps\nHold your iPhone\nnear the screen");
+    }
+    home_action.text = card_mode ? "Turn off card mode" : "Turn on card mode";
+}
+
 static void ui_home(void) {
+    for (int i = 0; i < NB_CAPS; i++) {
+        snprintf(per_tap_text[i], sizeof(per_tap_text[i]), "%u USDC per tap", (unsigned) PER_TAP_CAPS[i]);
+        snprintf(total_text[i], sizeof(total_text[i]), "%u USDC in total", (unsigned) TOTAL_CAPS[i]);
+        snprintf(count_text[i], sizeof(count_text[i]), "%u payment%s", (unsigned) COUNT_CAPS[i],
+                 COUNT_CAPS[i] == 1 ? "" : "s");
+        per_tap_names[i] = per_tap_text[i];
+        total_names[i] = total_text[i];
+        count_names[i] = count_text[i];
+    }
+    memset(&budget_switch, 0, sizeof(budget_switch));
+    budget_switch.text = "Budget mode";
+    budget_switch.subText = "One tap within the limits on the next pages. Off: manual mode.";
+    budget_switch.token = BUDGET_TOKEN;
+    budget_switch.tuneId = NBGL_NO_TUNE;
+    memset(settings_contents, 0, sizeof(settings_contents));
+    settings_contents[0].type = SWITCHES_LIST;
+    settings_contents[0].content.switchesList.switches = &budget_switch;
+    settings_contents[0].content.switchesList.nbSwitches = 1;
+    settings_contents[0].contentActionCallback = settings_changed;
+    settings_contents[1].type = CHOICES_LIST;
+    settings_contents[1].content.choicesList.names = per_tap_names;
+    settings_contents[1].content.choicesList.nbChoices = NB_CAPS;
+    settings_contents[1].content.choicesList.token = PER_TAP_TOKEN;
+    settings_contents[1].content.choicesList.tuneId = NBGL_NO_TUNE;
+    settings_contents[1].contentActionCallback = settings_changed;
+    settings_contents[2] = settings_contents[1];
+    settings_contents[2].content.choicesList.names = total_names;
+    settings_contents[2].content.choicesList.token = TOTAL_TOKEN;
+    settings_contents[3] = settings_contents[1];
+    settings_contents[3].content.choicesList.names = count_names;
+    settings_contents[3].content.choicesList.token = COUNT_TOKEN;
+    settings.callbackCallNeeded = false;
+    settings.contentsList = settings_contents;
+    settings.nbContents = 4;
+    home_action.callback = card_toggle;
+    home_action.style = SOFT_HOME_ACTION;
+    ui_update();
     nbgl_useCaseHomeAndSettings(APPNAME,
                                 &C_tapcash_64px,
-                                "Hold your iPhone\nnear the screen",
+                                home_text,
                                 INIT_HOME_PAGE,
+                                &settings,
                                 NULL,
-                                NULL,
-                                NULL,
+                                &home_action,
                                 app_quit);
+}
+
+// The budget mode switch starts or stops budget mode. A new total or count restarts that part of a
+// running budget.
+static void settings_changed(int token, uint8_t index, int page) {
+    (void) page;
+    if (token == BUDGET_TOKEN) {
+        if (index == ON_STATE) {
+            budget_left = USDC(TOTAL_CAPS[total_idx]);
+            budget_taps_left = COUNT_CAPS[count_idx];
+        } else {
+            budget_left = 0;
+        }
+    } else if (index >= NB_CAPS) {
+        return;
+    } else if (token == PER_TAP_TOKEN) {
+        per_tap_idx = index;
+    } else if (token == TOTAL_TOKEN) {
+        total_idx = index;
+        if (budget_left) {
+            budget_left = USDC(TOTAL_CAPS[total_idx]);
+        }
+    } else if (token == COUNT_TOKEN) {
+        count_idx = index;
+        if (budget_left) {
+            budget_taps_left = COUNT_CAPS[count_idx];
+        }
+    }
+    ui_update();
+}
+
+static void card_choice(bool confirm) {
+    if (!confirm) {
+        ui_home();
+        return;
+    }
+    card_mode = true;
+    card_ticks_left = CARD_MODE_TICKS;
+    nbgl_useCaseStatus("Card mode on", true, ui_home);
+}
+
+// Called by the SDK's IO loop on every ticker event
+void app_ticker_event_callback(void) {
+    if (card_mode && --card_ticks_left == 0) {
+        card_mode = false;
+        nbgl_useCaseStatus("Card mode timed out", false, ui_home);
+    }
+}
+
+static void card_toggle(void) {
+    if (card_mode) {
+        card_mode = false;
+        nbgl_useCaseStatus("Card mode off", true, ui_home);
+        return;
+    }
+    nbgl_useCaseChoice(&C_tapcash_64px,
+                       "Turn on card mode?",
+                       "The next payment an iPhone asks for goes out on the first tap, "
+                       "with no review and no limit, like tapping a card. Card mode then turns off, "
+                       "or after one minute.",
+                       "Turn on",
+                       "Cancel",
+                       card_choice);
 }
 
 static bool get_address(uint8_t out[20]) {
@@ -103,6 +265,7 @@ static size_t der_int(uint8_t *out, const uint8_t v[32]) {
 static bool sign_request(void) {
     uint8_t from[20], buf[7 * 32], digest[32], r[32], s[32];
     uint32_t info = 0;
+    budget_paid_valid = false;  // `response` is about to change
     if (!get_address(from)) {
         return false;
     }
@@ -155,9 +318,9 @@ static void review_choice(bool confirm) {
 }
 
 static void start_review(const uint8_t *kh) {
-    char amount[24] = {0};  // SDK format_fpu64 doesn't NUL-terminate amounts >= 1
+    char amount[24];
     memcpy(request, kh, REQ_LEN);
-    format_fpu64_trimmed(amount, sizeof(amount), read_u64_be(request, 20), 6);
+    format_usdc(amount, sizeof(amount), read_u64_be(request, 20));
     size_t n = snprintf(review_text, sizeof(review_text), "%s USDC on Base Sepolia\nto 0x", amount);
     format_hex(request, 20, review_text + n, sizeof(review_text) - n);
     state = REVIEW;
@@ -241,6 +404,42 @@ static void handle_u2f_sign(uint8_t p1, const uint8_t *data, int lc) {
         return;
     }
 
+    // Checked first: the payment may have turned card or budget mode off
+    if (budget_paid_valid && memcmp(kh, budget_paid, REQ_LEN) == 0) {  // iOS retried a tap we already paid
+        io_send_response_pointer(response, response_len, SW_OK);
+        return;
+    }
+
+    // Card mode, then budget mode: signed on this tap, without review. Not while a review is open.
+    if ((card_mode || budget_left) && state != REVIEW) {
+        uint64_t value = read_u64_be(kh, 20);
+        if (card_mode || (value <= USDC(PER_TAP_CAPS[per_tap_idx]) && value <= budget_left)) {
+            memcpy(request, kh, REQ_LEN);
+            if (!sign_request()) {
+                io_send_sw(SW_CRYPTO);
+                return;
+            }
+            state = IDLE;  // an approved but uncollected review is dropped: its response was overwritten
+            if (card_mode) {
+                card_mode = false;  // one payment only; doesn't count against the budget
+            } else {
+                budget_left -= value;
+                if (--budget_taps_left == 0) {
+                    budget_left = 0;  // all payments used: budget mode off
+                }
+            }
+            memcpy(budget_paid, kh, REQ_LEN);
+            budget_paid_valid = true;
+            io_send_response_pointer(response, response_len, SW_OK);
+            char amount[24];
+            format_usdc(amount, sizeof(amount), value);
+            size_t n = snprintf(review_text, sizeof(review_text), "Paid %s USDC\nto 0x", amount);
+            format_hex(request, 20, review_text + n, sizeof(review_text) - n);  // not kh: the reply overwrote it
+            nbgl_useCaseStatus(review_text, true, ui_home);
+            return;
+        }
+    }
+
     io_send_sw(SW_NOT_SATISFIED);
     if (state != REVIEW) {
         start_review(kh);
@@ -251,6 +450,9 @@ void app_main(void) {
     const uint8_t *data;
 
     io_init();
+    per_tap_idx = 1;  // 5 USDC
+    total_idx = 1;    // 20 USDC
+    count_idx = 2;    // 10 payments
     ui_home();
 
     for (;;) {
