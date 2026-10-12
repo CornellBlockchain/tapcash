@@ -8,18 +8,17 @@
 # Env:
 #   TAPCASH_ACCOUNT  session label of the Flex address (find it with: wallet-cli session view)
 #   TAPCASH_ADDRESS  the Flex address, 0x..., needed by topup
-#   TICKER           token ticker, default tUSDC (wallet-cli's name for USDC on Base Sepolia)
 #   WALLET_CLI       command to run, default wallet-cli (e.g. "npx -y @ledgerhq/wallet-cli")
 #   LIVE=1           really sign and broadcast; without it, sends are --dry-run only
 set -euo pipefail
 W=${WALLET_CLI:-wallet-cli}
-TICKER=${TICKER:-tUSDC}
+TICKER=tUSDC  # wallet-cli's name for USDC on Base Sepolia
 dry=--dry-run
 [ "${LIVE:-}" = 1 ] && dry=
 
 case "${1:-}" in
   balance|topup|out) : "${TAPCASH_ACCOUNT:?set TAPCASH_ACCOUNT to the Flex label from: wallet-cli session view}" ;;
-  *) sed -n '2,13p' "$0" >&2; exit 2 ;;
+  *) sed -n '2,12p' "$0" >&2; exit 2 ;;
 esac
 case "$1" in
   balance) $W balances "$TAPCASH_ACCOUNT" ;;
