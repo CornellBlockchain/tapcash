@@ -63,14 +63,15 @@
   </section>
 </main>
 
+<script type="importmap">{ "imports": { "viem": "https://esm.sh/viem@2.57.4", "viem/": "https://esm.sh/viem@2.57.4/" } }</script>
 <script type="module">
 // Desktop setup page: talks to the Flex over USB with Ledger's Device Management Kit (WebHID, Chrome/Edge).
 // It asks the TapCash app for its address with E0 02 P1=1, which shows the address on the Flex and only
 // answers once the user confirms, then shows the balance and a QR code for funding.
 import { DeviceManagementKitBuilder } from 'https://esm.sh/@ledgerhq/device-management-kit@1.11.0';
 import { webHidTransportFactory } from 'https://esm.sh/@ledgerhq/device-transport-kit-web-hid@1.2.4';
-import { createPublicClient, http, formatUnits, getAddress } from 'https://esm.sh/viem@2.57.4';
-import { baseSepolia } from 'https://esm.sh/viem@2.57.4/chains';
+import { createPublicClient, http, formatUnits, getAddress, erc20Abi } from 'viem';
+import { baseSepolia } from 'viem/chains';
 import QRCode from 'https://esm.sh/qrcode@1.5.4';
 import { USDC } from './tapcash.js';
 
@@ -109,9 +110,8 @@ async function show(address) {
   QRCode.toCanvas($('qr'), address, { width: 200, margin: 1 });
   $('copy').onclick = async () => { await navigator.clipboard.writeText(address); $('copy').textContent = 'Copied'; };
   const pub = createPublicClient({ chain: baseSepolia, transport: http() });
-  const abi = [{ name: 'balanceOf', type: 'function', stateMutability: 'view', inputs: [{ type: 'address' }], outputs: [{ type: 'uint256' }] }];
   const [usdc, eth] = await Promise.all([
-    pub.readContract({ address: USDC, abi, functionName: 'balanceOf', args: [address] }),
+    pub.readContract({ address: USDC, abi: erc20Abi, functionName: 'balanceOf', args: [address] }),
     pub.getBalance({ address }),
   ]);
   $('usdc').textContent = formatUnits(usdc, 6) + ' USDC';

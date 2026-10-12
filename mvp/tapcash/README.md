@@ -91,8 +91,7 @@ The Flex is the signer. A custom app built with the Ledger secure SDK signs each
 3. It shows the address, a QR code, and the Base Sepolia USDC and ETH balances for funding.
 
 Tests on Speculos:
-- `node test-setup.mjs` covers the device command.
-- `node test-setup-dmk.cjs` runs the same flow through DMK, using its Speculos transport in place of WebHID.
+- `node test-setup-dmk.cjs` runs the page's flow through DMK, with its Speculos transport in place of WebHID, and checks the address the Flex shows.
 
 ## Cash out to a card (sandbox)
 
