@@ -3,13 +3,11 @@
 Tap your Ledger Flex on an iPhone to pay in USDC on Base.
 
 - **No app for the receiver.** The iPhone side runs in Safari.
-- **No ETH for the payer.** The receiver's phone pays the gas.
+- **No ETH for the payer.** The receiver's phone pays the gas working like a paymaster. 
 - **Nothing signed blind.** The Flex shows the amount, chain and receiver before it signs.
-- **Mainnet or testnet.** Switch between Base and Base Sepolia on the page.
+- **Mainnet/testnet.** Real USDC transactions on mainnet and simulated virtual cards on testnet. 
 
-Live at https://tapcash-ruby.vercel.app, and tested with real USDC on Base mainnet.
-
-Built for the Ledger N3XT Hackathon @ OP3N 2026.
+Live at https://tapcash-ruby.vercel.app/site, and tested with real USDC on Base mainnet.
 
 ## Why
 
