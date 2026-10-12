@@ -1,73 +1,70 @@
 # TapCash
 
-Tap your Ledger Flex to an iPhone, approve on the Flex, tap again, and USDC moves on Base.
+Tap your Ledger Flex on an iPhone to pay in USDC on Base.
 
-- **Nothing to install on the iPhone.** It runs in Safari.
-- **The payer needs no ETH.** The receiver's phone pays the gas.
-- **Your key stays on the Ledger.** The Flex shows the amount, the chain and the receiver before it signs.
-- **Base mainnet or Base Sepolia,** picked on the page.
+- **No app for the receiver.** The iPhone side runs in Safari.
+- **No ETH for the payer.** The receiver's phone pays the gas.
+- **Nothing signed blind.** The Flex shows the amount, chain and receiver before it signs.
+- **Mainnet or testnet.** Switch between Base and Base Sepolia on the page.
 
-Live page: https://tapcash-ruby.vercel.app. It works on a real Flex, and has moved real USDC on Base mainnet.
+Live at https://tapcash-ruby.vercel.app, and tested with real USDC on Base mainnet.
 
 Built for the Ledger N3XT Hackathon @ OP3N 2026.
 
 ## Why
 
-Hardware wallets are treated as signers: something a computer or phone app asks to approve a transaction it built. The wallet app does the paying, and the Ledger only says yes or no.
+Today a hardware wallet is a signer. A wallet app builds the payment, and the Ledger only approves it.
 
-TapCash makes the Ledger the thing that pays. Like a card, you tap it at the point of sale: the Flex receives the payment request, shows it, signs it, and hands the payment over. There's no wallet app or computer on the payer's side. The payer only needs their Ledger, and the key never leaves its secure chip.
+TapCash turns the Ledger into the thing you pay with. You tap it like a card: the Flex gets the request, shows it, signs it and hands over the payment. The payer needs no phone or computer, only their Ledger.
 
 ## How a payment works
 
-1. **The receiver asks.** They type an amount on the iPhone page and hold the phone near the Flex.
-2. **The payer checks.** The Flex shows "Send payment? 5 USDC on Base to 0x…" and the payer approves.
-3. **The payer taps again.** The Flex hands over a signed USDC transfer. The phone checks it really came from that Flex and sends it to the chain.
-4. **Done.** The page shows the amount received and a Basescan link, usually within a few seconds.
+1. **Request.** The receiver enters an amount on the iPhone and holds it to the Flex.
+2. **Approve.** The Flex shows "Send payment? 5 USDC on Base to 0x…". The payer approves.
+3. **Tap again.** The Flex hands over the signed transfer. The phone checks it and sends it.
+4. **Done.** The phone shows the payment and a Basescan link, usually within seconds.
 
-The receiver can then move the USDC to their own Ledger by tapping it (or connecting Ledger Wallet), or, on testnet, cash it out to a sandbox Visa card.
+Afterwards, the receiver can move the USDC to their own Ledger, or on testnet, cash it out to a sandbox Visa card.
 
 ## How the tap works
 
-Without a paid Apple developer account, an iPhone app can't talk NFC to custom hardware. But Safari already talks to NFC security keys for logins (WebAuthn). So the Flex app acts as a security key:
+iPhone apps need a paid Apple developer account to use NFC this way, but Safari can already use NFC security keys for logins (WebAuthn). So the Flex app poses as a security key. The payment request goes where a login sends a key ID, and the signature comes back where a key returns its login signature.
 
-- The page puts the payment request where a login would put a key ID.
-- The Flex puts its signature where a security key would put its login signature.
-
-The Flex builds the transfer itself from the request and signs that. It never signs a hash the page gives it, so the page can't trick it into signing something other than what's on screen.
+The Flex builds the transfer from the request and signs that, never a hash from the page. What it signs is exactly what it shows.
 
 ## Ways to pay
 
-Set on the Flex:
+Chosen on the Flex:
 
-| Mode | What happens | When to use it |
+| Mode | How it works | Good for |
 | --- | --- | --- |
-| **Manual** (default) | Every payment is reviewed: tap, approve, tap again. | Any amount, full control. |
-| **Budget** | Payments within your limits go through on one tap, with no review. You set the per-payment limit, total and number of payments. | Many small payments, like a day at a market. |
-| **Card** | The next payment, of any amount, goes through on one tap. Then it turns off, or after a minute. | Paying at a counter, like tapping a card. |
+| **Manual** (default) | Review every payment: tap, approve, tap. | Any amount |
+| **Budget** | One tap, no review, within limits you set (per payment, total, count). | Lots of small payments |
+| **Card** | The next payment goes through on one tap, any amount. Turns off after that, or after a minute. | Paying at a counter |
 
-## Testnet and mainnet
+## Mainnet and testnet
 
-Tap the network label in the page header to switch between **Base Sepolia** (test money, the default) and **Base** (real USDC).
+Tap the network label at the top of the page to switch between **Base Sepolia** (test money, the default) and **Base** (real USDC).
 
-- The Flex shows which chain it's signing for, and a signature for one chain doesn't work on the other.
-- New iPhone wallets get a little gas automatically on both chains: about 0.0005 test ETH, or about $0.10 of real ETH on mainnet.
-- Card cash-out is a sandbox demo, so it only appears on testnet.
+- The Flex names the chain, and a signature only works on that chain.
+- New phones get gas automatically: test ETH on Sepolia, about $0.10 of ETH on mainnet.
+- Card cash-out is a sandbox demo, so it's testnet only.
 
 ## Safety
 
-- **Keys:** the payer's key never leaves the Flex's secure chip, and the Flex shows exactly what it signs.
-- **Replay:** each signature is for one amount, one receiver, one chain, and one random nonce, and it expires after an hour.
-- **Modes:** budget and card mode trade review for speed. Like a contactless card, someone who taps your unlocked Flex can take what's left of your budget, or anything while card mode is on. Both live only in memory and turn off when the app closes.
-- **The iPhone wallet** is a key stored in Safari. It's fine for receiving change; move anything real to a Ledger.
+- **Keys** never leave the Flex's secure chip.
+- **Each signature** covers one amount, one receiver, one chain and a random nonce, and expires in an hour.
+- **Budget and card mode** trade review for speed. Like a contactless card, someone who taps your unlocked Flex can spend what's left of the budget, or any amount in card mode. Both reset when the app closes.
+- **The iPhone wallet** is a key stored in Safari. Keep small amounts there and move the rest to a Ledger.
 
 ## Try it
 
 **With a Flex and an iPhone:**
-1. Sideload the TapCash app onto the Flex ([`SETUP.md`](SETUP.md), section 5).
-2. Put some USDC on the Flex's address: free test USDC from https://faucet.circle.com, or real USDC on Base.
-3. Open https://tapcash-ruby.vercel.app in Safari, enter an amount, and tap.
+1. Install the TapCash app on the Flex ([`SETUP.md`](SETUP.md), section 5).
+2. Send USDC to the Flex: free test USDC from https://faucet.circle.com, or real USDC on Base.
+3. Open https://tapcash-ruby.vercel.app in Safari, enter an amount and tap.
 
-**Without hardware:** the tests run the whole flow on the Ledger emulator. See [`SETUP.md`](SETUP.md), section 4.
+**Without hardware:** the tests run the full flow on the Ledger emulator ([`SETUP.md`](SETUP.md), section 4).
 
 ## Architecture
 
@@ -88,73 +85,72 @@ Tap the network label in the page header to switch between **Base Sepolia** (tes
                         └──────────────┘
 ```
 
-- **The Flex** only ever sees a request and returns a signature. It needs no internet.
-- **The phone** checks the signature, sends the transaction, and shows the result.
-- **The APIs** are optional. Without them, you fund the phone's gas by hand and the cash-out button stays hidden.
+- **The Flex** takes a request and returns a signature. It never goes online.
+- **The phone** checks the signature, sends the transaction and shows the result.
+- **The APIs** are optional. Without them you add gas by hand and cash-out is hidden.
 
-## Demo in two minutes
+## Two-minute demo
 
-1. Open TapCash on the Flex. The home screen says "Manual mode: two taps".
-2. On the iPhone, open the page, type `1`, and press **Tap Ledger**.
-3. Hold the phone to the Flex. It shows "Send payment? 1 USDC on Base Sepolia to 0x…". Touch **Approve**.
-4. Tap again. The phone shows "+1 USDC" with a Basescan link.
-5. On the Flex, turn on **card mode**, request `2` on the phone, and tap once. It pays straight away, then card mode turns off.
-6. Tap the network label on the page to switch to **Base** and repeat with real USDC.
+1. Open TapCash on the Flex.
+2. On the iPhone, type `1` and press **Tap Ledger**.
+3. Hold the phone to the Flex. Check "1 USDC on Base Sepolia" and touch **Approve**.
+4. Tap again. The phone shows "+1 USDC".
+5. Turn on **card mode** on the Flex, request `2` and tap once. It pays immediately.
+6. Switch the page to **Base** and repeat with real USDC.
 
 ## FAQ
 
-**Does the payer need an app on their phone?**
-No. The payer only needs their Ledger Flex. The receiver needs an iPhone with Safari.
+**What does the payer need?**
+Just their Ledger Flex. The receiver needs an iPhone with Safari.
 
 **Why two taps?**
-iOS ends the NFC session as soon as the Flex says "not yet, waiting for approval". The second tap collects the signature. Budget and card mode sign on the first tap.
+iOS closes the NFC connection while the Flex waits for approval, so a second tap picks up the signature. Budget and card mode need only one.
 
 **Who pays the gas?**
-The receiver's phone, from its burner wallet. On mainnet a payment costs well under a cent, and the gas top-up funds new phones automatically.
+The receiver's phone. A payment on Base costs well under a cent, and new phones get gas automatically.
 
-**Can the page make the Flex sign something else?**
-No. The Flex builds the USDC transfer from the request fields, shows them, and signs that. It only signs USDC transfers on Base or Base Sepolia.
+**Can the page trick the Flex into signing something else?**
+No. The Flex only signs USDC transfers on Base or Base Sepolia, built from fields it shows on screen.
 
-**What if the phone is lost or Safari's data is cleared?**
-The burner wallet and anything in it is gone. That's why the page offers "Move to my Ledger" right after you get paid.
+**What if Safari's data is cleared?**
+The phone's wallet is lost, along with anything in it. That's why the page offers "Move to my Ledger" after each payment.
 
-**Does it work on Android?**
-Not tested. The tap uses standard WebAuthn over NFC, so Chrome on Android may work, but we've only tried iPhone Safari.
+**Android?**
+Untested. We've only tried iPhone Safari.
 
 ## What's next
 
-Work in progress on other branches:
-- **Private receiving** (`private-payments`, PR #10): a fresh receiving address for each payment, so payments aren't all linked to one address.
-- **Ledger Wallet CLI** (`wallet-cli`, PR #8): check, top up and empty the TapCash address from the command line.
-- **DMK setup page** (`dmk-setup`, PR #7): confirm the Flex address over USB with Ledger's Device Management Kit.
+In progress:
+- **Private receiving** (PR #10): a new receiving address for every payment.
+- **Ledger Wallet CLI** (PR #8): check, top up and empty the TapCash address from a terminal.
+- **DMK setup page** (PR #7): confirm the Flex address over USB.
 
-Ideas beyond that:
-- A real card off-ramp instead of the sandbox, e.g. through a card issuer.
-- Paying the gas with USDC so the receiver needs no ETH either.
-- More tokens and chains, each built into the Flex app with its own check.
+Later:
+- A real card off-ramp in place of the sandbox.
+- Gas paid in USDC, so the receiver needs no ETH.
+- More tokens and chains.
 
 ## Built with
 
-- **Flex app:** C on the Ledger secure SDK, with its own minimal U2F responder and EIP-712 signing.
-- **iPhone page:** one static HTML file using viem. No build step, hosted on Vercel.
-- **APIs:** two Vercel functions, one for the gas top-up and one for the Increase sandbox card cash-out.
-- **Chain:** USDC's `transferWithAuthorization` (EIP-3009) on Base, so the payer never needs ETH.
+- **Flex app:** C on the Ledger secure SDK, with a minimal U2F responder and EIP-712 signing.
+- **iPhone page:** one static HTML file with viem, hosted on Vercel.
+- **APIs:** two Vercel functions, for gas top-ups and the Increase sandbox cash-out.
+- **Payments:** USDC `transferWithAuthorization` (EIP-3009) on Base.
 
-## Where things are
+## Repo
 
 | Path | What |
 | --- | --- |
-| `mvp/tapcash/flex-app/` | The Ledger Flex app |
-| `mvp/tapcash/web/` | The iPhone page and its two small APIs |
-| `mvp/tapcash/web/site/` | The product website |
-| `mvp/tapcash/test*.mjs` | Tests on the Ledger emulator |
+| `mvp/tapcash/flex-app/` | Ledger Flex app |
+| `mvp/tapcash/web/` | iPhone page and APIs |
+| `mvp/tapcash/web/site/` | Product website |
+| `mvp/tapcash/test*.mjs` | Emulator tests |
 
-More detail on the internals, request format and limits: [`mvp/tapcash/README.md`](mvp/tapcash/README.md).
-Building and running it yourself: [`SETUP.md`](SETUP.md).
+Internals and request format: [`mvp/tapcash/README.md`](mvp/tapcash/README.md). Build and run: [`SETUP.md`](SETUP.md).
 
 ## Limits
 
-- **Two taps.** iOS ends the NFC session after the first tap, so approval needs a second one (budget and card mode skip it).
-- **Not private.** Every payment comes from the Flex's one address.
-- **A signed cheque, not cash.** If the payer empties their balance before the phone sends the transfer, it fails.
-- **iPhone and Safari only** so far, and the TapCash app has to be open on the Flex.
+- **Two taps** in manual mode, because of how iOS handles NFC.
+- **Not private yet.** All payments come from the Flex's one address.
+- **A signed cheque, not cash.** If the payer spends the balance before the phone sends the transfer, it fails.
+- **iPhone and Safari only** so far, with the TapCash app open on the Flex.
