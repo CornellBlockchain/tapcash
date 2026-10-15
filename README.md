@@ -11,6 +11,8 @@
 
 Live at https://tapcash-ruby.vercel.app/site, and tested with real USDC on Base mainnet.
 
+Pitch deck: https://www.canva.com/design/DAHXuWDclqg/view
+
 ## Why
 
 Today a hardware wallet is a signer. A wallet app builds the payment, and the Ledger only approves it.
